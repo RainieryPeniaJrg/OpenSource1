@@ -221,7 +221,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         </div>
     }
 
-    <DocumentoTotales Totales="@(totales is null ? null : TotalesDocumento.Desde(totales, lineas.Sum(l => l.ImporteDescuentoLinea)))" Titulo="@(EsPosteada ? "Total acreditado" : "Total a acreditar (vista previa)")" />
+    <DocumentoTotales Totales="@(totales is null ? null : TotalesDocumento.Desde(totales, lineas.Sum(l => l.ImporteDescuentoLinea)))" Titulo="Total a acreditar" />
 
     @if (!EsPosteada)
     {
@@ -415,13 +415,10 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         <BotonesPreparacion TextoRegistrar="Registrar nota de crédito" Prefijo="UpdateInput" Proximo="@proximo" LimpiarHref="@UrlPropia" CancelarHref="@Volver" />
     };
 
-    /// <summary>
-    /// Resumen de la confirmación de "Registrar nota de crédito". El total es la vista previa: el definitivo se calcula al registrar
-    /// (descontando lo ya acreditado de la factura).
-    /// </summary>
+    /// <summary>Resumen de la confirmación de "Registrar nota de crédito" (el total de /totales ya aplica los topes del registro).</summary>
     private IReadOnlyList<DatoDerivado> ResumenRegistro => borrador is null ? [] :
     [
-        new("Total (vista previa)", totales is null ? "—" : VentasOpciones.Importe(totales.ImporteTotal)),
+        new("Total", totales is null ? "—" : VentasOpciones.Importe(totales.ImporteTotal)),
         new("Factura de origen", borrador.FacturaVentaNumero),
         new("Serie", borrador.SerieRegistroCodigo ?? "—"),
         new("Próximo número", proximo?.Numero ?? "—"),

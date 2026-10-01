@@ -100,6 +100,9 @@ public sealed class AltaRapidaNotaTests
         Assert.Contains("id=\"linea-10000\"", html);
         Assert.DoesNotContain(">Postear<", html);
         Assert.Contains("Se numerará con la serie <strong>NC</strong> · próximo <strong>NC-000045</strong>", html);
+        // El total viene de /totales (ya con los topes que aplica el registro): sin calificativos.
+        Assert.Contains(">Total a acreditar</h2>", html);
+        Assert.DoesNotContain("vista previa)", html);
     }
 
     [Fact]
@@ -124,6 +127,7 @@ public sealed class AltaRapidaNotaTests
         Assert.Contains(">Registrar nota de crédito</h2>", dialogo);
         Assert.Contains("no se puede deshacer", dialogo);
         Assert.Contains($"<dd>{Factura}</dd>", dialogo);
+        Assert.Contains("<dt class=\"font-semibold\">Total</dt>", dialogo);
         Assert.StartsWith("/notas-credito-venta/NC-000045?ok=registrada&aplicado=59.00", FormulariosSsr.Destino(registrado));
     }
 
