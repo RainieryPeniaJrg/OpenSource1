@@ -47,10 +47,11 @@ public sealed class FacturaVentaApiClient(HttpClient httpClient, ILogger<Factura
     {
         var body = new CreateBorradorBody(
             input.SocioNegocioId, input.SocioNegocioFacturarAId, input.FechaRegistro, input.FechaDocumento, input.FechaVencimiento,
-            input.AlmacenId, input.Descripcion, input.SerieBorradorId, input.SerieRegistroId);
+            input.AlmacenId, input.Descripcion, input.SerieBorradorId, input.SerieRegistroId,
+            input.PrimeraLinea is { } linea ? Linea(linea) : null);
         using var response = await httpClient.PostAsJsonAsync($"{BaseRoute}/borradores", body, cancellationToken);
         return await VentaApiRespuestas.ToResultAsync<FacturaVentaBorradorResponse>(
-            response, "Borrador de factura creado.", BorradorNoEncontrado, "borradores de factura", logger, cancellationToken);
+            response, "Factura en preparación creada.", BorradorNoEncontrado, "borradores de factura", logger, cancellationToken);
     }
 
     public async Task<VentaOperationResult<FacturaVentaBorradorResponse>> UpdateBorradorAsync(
@@ -100,9 +101,7 @@ public sealed class FacturaVentaApiClient(HttpClient httpClient, ILogger<Factura
     public async Task<VentaOperationResult<LineaFacturaVentaBorradorResponse>> CreateLineaAsync(
         Guid borradorId, LineaFacturaInput input, CancellationToken cancellationToken = default)
     {
-        var body = new LineaBody(
-            input.Tipo, input.ProductoId, input.CuentaContableId, input.Descripcion, input.AlmacenId, input.UnidadMedidaId,
-            input.Cantidad, input.PrecioUnitario, input.PorcentajeDescuentoLinea, input.GrupoIvaProductoId);
+        var body = Linea(input);
         using var response = await httpClient.PostAsJsonAsync($"{BaseRoute}/borradores/{borradorId}/lineas", body, cancellationToken);
         return await VentaApiRespuestas.ToResultAsync<LineaFacturaVentaBorradorResponse>(
             response, "Línea agregada.", BorradorNoEncontrado, "líneas de factura", logger, cancellationToken);
@@ -181,9 +180,13 @@ public sealed class FacturaVentaApiClient(HttpClient httpClient, ILogger<Factura
     }
 
     // Cuerpos de red exactos de FacturasVentaController (Blazor no referencia el proyecto Api).
+    private static LineaBody Linea(LineaFacturaInput input) => new(
+        input.Tipo, input.ProductoId, input.CuentaContableId, input.Descripcion, input.AlmacenId, input.UnidadMedidaId,
+        input.Cantidad, input.PrecioUnitario, input.PorcentajeDescuentoLinea, input.GrupoIvaProductoId);
+
     private sealed record CreateBorradorBody(
         Guid SocioNegocioId, Guid? SocioNegocioFacturarAId, DateOnly? FechaRegistro, DateOnly? FechaDocumento,
-        DateOnly? FechaVencimiento, Guid? AlmacenId, string? Descripcion, Guid? SerieBorradorId, Guid? SerieRegistroId);
+        DateOnly? FechaVencimiento, Guid? AlmacenId, string? Descripcion, Guid? SerieBorradorId, Guid? SerieRegistroId, LineaBody? PrimeraLinea);
 
     private sealed record UpdateBorradorBody(
         long Xmin, Guid SocioNegocioId, Guid SocioNegocioFacturarAId, DateOnly? FechaRegistro, DateOnly? FechaDocumento,

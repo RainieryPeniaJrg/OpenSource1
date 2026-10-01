@@ -408,7 +408,7 @@ public sealed class ContabilidadVistasApiTests(PostgresTestFixture fixture) : IC
     {
         var creado = await _client.PostAsJsonAsync("/api/facturas-venta/borradores", new
         {
-            socioNegocioId = socio, fechaRegistro, almacenId = lineaProducto?.Almacen,
+            socioNegocioId = socio, fechaRegistro,
         });
         Assert.True(creado.StatusCode == HttpStatusCode.Created, await creado.Content.ReadAsStringAsync());
         var borrador = (await creado.Content.ReadFromJsonAsync<FacturaVentaBorradorResponse>())!;

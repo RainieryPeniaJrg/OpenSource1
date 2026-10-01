@@ -54,29 +54,12 @@ public sealed class CreateLineaFacturaVentaBorradorCommandHandler(
         var datos = new LineaFacturaDatos(
             request.Tipo, request.ProductoId, request.CuentaContableId, request.Descripcion, request.AlmacenId, request.UnidadMedidaId,
             request.Cantidad, request.PrecioUnitario, request.PorcentajeDescuentoLinea, request.GrupoIvaProductoId);
-        var calculo = await LineaFacturaVentaBorradorReglas.ValidarYCalcularAsync(
-            unitOfWork, conversion, derivador, cabecera!, datos, cancellationToken);
-        if (!calculo.TryObtenerValor(out var valores))
+        var alta = await LineaFacturaVentaBorradorReglas.AgregarAsync(unitOfWork, conversion, derivador, cabecera!, datos, cancellationToken);
+        if (!alta.TryObtenerValor(out var entity))
         {
-            return Result<LineaFacturaVentaBorradorResponse>.Fallo(calculo);
+            return Result<LineaFacturaVentaBorradorResponse>.Fallo(alta);
         }
 
-        var lineasRepo = unitOfWork.Repository<LineaFacturaVentaBorrador>();
-        var lineas = await lineasRepo.ListAsync(x => x.FacturaVentaBorradorId == request.FacturaVentaBorradorId, cancellationToken);
-        if (lineas.Count >= MaximoLineasPorBorrador)
-        {
-            return Result<LineaFacturaVentaBorradorResponse>.Fallo(new Error(
-                "factura.limite_lineas", $"El borrador ya tiene el máximo de {MaximoLineasPorBorrador} líneas.", "FacturaVentaBorradorId"));
-        }
-
-        var entity = new LineaFacturaVentaBorrador
-        {
-            FacturaVentaBorradorId = request.FacturaVentaBorradorId,
-            NumeroLinea = (lineas.Count == 0 ? 0 : lineas.Max(x => x.NumeroLinea)) + 10000
-        };
-        valores.Aplicar(entity);
-
-        await lineasRepo.AddAsync(entity, cancellationToken);
         await unitOfWork.CommitAsync(cancellationToken);
 
         return Result<LineaFacturaVentaBorradorResponse>.Exito((await readRepository.GetByIdAsync(entity.Id, cancellationToken))!);

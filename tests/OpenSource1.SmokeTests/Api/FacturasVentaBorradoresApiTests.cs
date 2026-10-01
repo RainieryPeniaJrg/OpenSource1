@@ -171,7 +171,60 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
 
         await AssertErrorAsync(
             await client.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = ok, almacenId = Guid.NewGuid() }),
-            HttpStatusCode.BadRequest, "almacén", "AlmacenId");
+            HttpStatusCode.BadRequest, "predeterminado", "AlmacenId");
+    }
+
+    [Fact]
+    public async Task AltaRapida_ConPrimeraLinea_201_ConLaLinea_YAlmacenPredeterminado()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente alta rapida");
+        var producto = await CrearProductoAsync(client, 100m);
+
+        var borrador = await CrearBorradorOkAsync(client, new
+        {
+            socioNegocioId = socio,
+            primeraLinea = new { tipo = TipoLineaFactura.Producto, productoId = producto, cantidad = 2m, precioUnitario = 100m },
+        });
+
+        Assert.Equal((1, AlmacenIds.Principal), (borrador.NumeroLineas, borrador.AlmacenId));
+        var lineas = await client.GetFromJsonAsync<List<LineaFacturaVentaBorradorResponse>>($"{Base}/borradores/{borrador.Id}/lineas");
+        Assert.Equal(200m, Assert.Single(lineas!).ImporteLinea);
+    }
+
+    [Fact]
+    public async Task AltaRapida_PrimeraLineaInvalida_400EnPrimeraLinea_YNoCreaBorrador()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente alta rapida invalida");
+        var producto = await CrearProductoAsync(client, 100m);
+
+        await AssertErrorAsync(
+            await client.PostAsJsonAsync($"{Base}/borradores", new
+            {
+                socioNegocioId = socio,
+                primeraLinea = new { tipo = TipoLineaFactura.Producto, productoId = producto, cantidad = 1m, precioUnitario = 0m },
+            }),
+            HttpStatusCode.BadRequest, "precio", "PrimeraLinea.PrecioUnitario");
+
+        var pagina = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?socioId={socio}");
+        Assert.Empty(pagina!.Items);
+    }
+
+    [Fact]
+    public async Task Almacen_DistintoDelPredeterminado_400NoEditable_EnAltaYModificacion()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente almacen fijo");
+        var otro = await CrearAlmacenAsync(client);
+
+        await AssertErrorAsync(
+            await client.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, almacenId = otro }),
+            HttpStatusCode.BadRequest, "predeterminado", "AlmacenId");
+        var borrador = await CrearBorradorOkAsync(client, new { socioNegocioId = socio, almacenId = AlmacenIds.Principal });
+        await AssertErrorAsync(
+            await client.PutAsJsonAsync($"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, almacenId = otro }),
+            HttpStatusCode.BadRequest, "predeterminado", "AlmacenId");
     }
 
     [Fact]
@@ -818,6 +871,13 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
     {
         var response = await client.PostAsJsonAsync(
             "/api/productos", new { codigo = Unico("PF"), nombre = "Producto factura", precioVenta, bloqueado });
+        Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+    }
+
+    private static async Task<Guid> CrearAlmacenAsync(HttpClient client)
+    {
+        var response = await client.PostAsJsonAsync("/api/almacenes", new { codigo = Unico("AL")[..10], nombre = "Almacén secundario", bloqueado = false, esPredeterminado = false });
         Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }

@@ -1058,7 +1058,7 @@ public sealed class PostearNotaCreditoVentaTests(PostgresTestFixture fixture) : 
         await using (var scope = _prueba.Provider.CreateAsyncScope())
         {
             var handler = ActivatorUtilities.CreateInstance<CreateFacturaVentaBorradorCommandHandler>(scope.ServiceProvider);
-            borradorId = Ok(await handler.Handle(new CreateFacturaVentaBorradorCommand(socio, null, D10, D10, null, almacen, null), default)).Id;
+            borradorId = Ok(await handler.Handle(new CreateFacturaVentaBorradorCommand(socio, null, D10, D10, null, null, null), default)).Id;
         }
 
         foreach (var l in lineas)

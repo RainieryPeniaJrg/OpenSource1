@@ -100,12 +100,18 @@ public sealed class UpdateFacturaVentaBorradorCommandHandler(
             return Result<FacturaVentaBorradorResponse>.Fallo(errorFecha);
         }
 
+        // Almacén (spec alta rápida): null o el actual = conservar; el predeterminado se acepta; cualquier otro -> 400.
         if (request.AlmacenId is { } almacenSolicitado && almacenSolicitado != entity.AlmacenId)
         {
-            var almacen = await FacturaVentaBorradorReglas.ResolverAlmacenAsync(unitOfWork, almacenSolicitado, cancellationToken);
-            if (!almacen.TryObtenerValor(out var almacenId))
+            var predeterminado = await FacturaVentaBorradorReglas.ResolverAlmacenAsync(unitOfWork, null, cancellationToken);
+            if (!predeterminado.TryObtenerValor(out var almacenId))
             {
-                return Result<FacturaVentaBorradorResponse>.Fallo(almacen);
+                return Result<FacturaVentaBorradorResponse>.Fallo(predeterminado);
+            }
+
+            if (almacenSolicitado != almacenId)
+            {
+                return Result<FacturaVentaBorradorResponse>.Fallo(FacturaVentaBorradorErrores.AlmacenNoEditable());
             }
 
             entity.AlmacenId = almacenId;

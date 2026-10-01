@@ -1,4 +1,5 @@
 using OpenSource1.Application.Data.UnitOfWork;
+using OpenSource1.Application.Features.FacturasVenta.Borradores.Handlers;
 using OpenSource1.Application.Services.Contabilidad;
 using OpenSource1.Application.Services.Inventario;
 using OpenSource1.Core.Common;
@@ -77,6 +78,46 @@ internal static class LineaFacturaVentaBorradorReglas
 
     /// <summary>Máximo de <c>numeric(18,6)</c>.</summary>
     public const decimal CantidadMaxima = 999_999_999_999.999999m;
+
+    /// <summary>
+    /// Alta de una línea nueva en <paramref name="cabecera"/> SIN guardar (lo hace el commit del llamador, dentro de su transacción):
+    /// valida y calcula (<see cref="ValidarYCalcularAsync"/>), comprueba el tope de
+    /// <see cref="CreateLineaFacturaVentaBorradorCommandHandler.MaximoLineasPorBorrador"/> líneas y asigna <c>NumeroLinea</c> = máximo + 10000.
+    /// Única lógica de alta de línea: la usan el alta de una línea y el alta del borrador con su primera línea (spec alta rápida).
+    /// </summary>
+    public static async Task<Result<LineaFacturaVentaBorrador>> AgregarAsync(
+        IUnitOfWork unitOfWork,
+        IConversionUnidadMedidaService conversion,
+        IDerivadorCuentas derivador,
+        FacturaVentaBorrador cabecera,
+        LineaFacturaDatos datos,
+        CancellationToken cancellationToken)
+    {
+        var calculo = await ValidarYCalcularAsync(unitOfWork, conversion, derivador, cabecera, datos, cancellationToken);
+        if (!calculo.TryObtenerValor(out var valores))
+        {
+            return Result<LineaFacturaVentaBorrador>.Fallo(calculo);
+        }
+
+        var lineasRepo = unitOfWork.Repository<LineaFacturaVentaBorrador>();
+        var lineas = await lineasRepo.ListAsync(x => x.FacturaVentaBorradorId == cabecera.Id, cancellationToken);
+        if (lineas.Count >= CreateLineaFacturaVentaBorradorCommandHandler.MaximoLineasPorBorrador)
+        {
+            return Result<LineaFacturaVentaBorrador>.Fallo(new Error(
+                "factura.limite_lineas",
+                $"El borrador ya tiene el máximo de {CreateLineaFacturaVentaBorradorCommandHandler.MaximoLineasPorBorrador} líneas.",
+                "FacturaVentaBorradorId"));
+        }
+
+        var entity = new LineaFacturaVentaBorrador
+        {
+            FacturaVentaBorradorId = cabecera.Id,
+            NumeroLinea = (lineas.Count == 0 ? 0 : lineas.Max(x => x.NumeroLinea)) + 10000,
+        };
+        valores.Aplicar(entity);
+        await lineasRepo.AddAsync(entity, cancellationToken);
+        return Result<LineaFacturaVentaBorrador>.Exito(entity);
+    }
 
     public static async Task<Result<LineaFacturaCalculada>> ValidarYCalcularAsync(
         IUnitOfWork unitOfWork,

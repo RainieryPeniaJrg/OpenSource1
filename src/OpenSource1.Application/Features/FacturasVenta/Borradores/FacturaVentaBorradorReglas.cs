@@ -23,6 +23,10 @@ internal static class FacturaVentaBorradorErrores
     /// <summary>Un borrador <c>Posteada</c> es de solo lectura (spec no-series): toda escritura sobre él o sus líneas -&gt; 409.</summary>
     public static Error Posteada(string campo = "Id") =>
         new("factura_borrador.posteada.conflicto", "El borrador ya se posteó: es de solo lectura (abra su factura).", campo);
+
+    /// <summary>El almacén de la cabecera lo fija el servidor: siempre el predeterminado (spec alta rápida).</summary>
+    public static Error AlmacenNoEditable() =>
+        new("almacen.no_editable", "El almacén no se elige: el documento usa el almacén predeterminado.", "AlmacenId");
 }
 
 /// <summary>Datos que un borrador toma del socio al asignarlo: snapshot del facturar-a, su término y los grupos congelados.</summary>

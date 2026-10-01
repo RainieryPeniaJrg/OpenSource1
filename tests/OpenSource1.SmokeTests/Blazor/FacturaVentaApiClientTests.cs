@@ -37,6 +37,25 @@ public sealed class FacturaVentaApiClientTests
     }
 
     [Fact]
+    public async Task CreateBorrador_ConPrimeraLinea_EnviaLaLineaConElTipoComoEntero()
+    {
+        var handler = new Grabador(HttpStatusCode.Created, BorradorJson);
+        var client = new FacturaVentaApiClient(Http(handler), NullLogger<FacturaVentaApiClient>.Instance);
+        var socio = Guid.NewGuid();
+        var producto = Guid.NewGuid();
+
+        await client.CreateBorradorAsync(new BorradorCabeceraInput(
+            socio, null, null, null, null, null, null,
+            PrimeraLinea: new LineaFacturaInput(TipoLineaFactura.Producto, producto, null, null, null, null, 2m, 10m, null, null)));
+
+        Assert.EndsWith("api/facturas-venta/borradores", handler.Uri!.AbsolutePath);
+        using var cuerpo = JsonDocument.Parse(handler.Cuerpo!);
+        var linea = cuerpo.RootElement.GetProperty("primeraLinea");
+        Assert.Equal((1, producto, 2m), (linea.GetProperty("tipo").GetInt32(), linea.GetProperty("productoId").GetGuid(), linea.GetProperty("cantidad").GetDecimal()));
+        Assert.Equal(JsonValueKind.Null, cuerpo.RootElement.GetProperty("almacenId").ValueKind);
+    }
+
+    [Fact]
     public async Task CreateLinea_EnviaElTipoComoEntero_ALaRutaDelBorrador()
     {
         var handler = new Grabador(HttpStatusCode.Created, "{}");
