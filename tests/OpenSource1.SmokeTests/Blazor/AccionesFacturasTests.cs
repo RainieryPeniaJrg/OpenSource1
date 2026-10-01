@@ -77,7 +77,8 @@ public sealed class AccionesFacturasTests
         // Una sola entrada para crear la nota (la de Crear ▾), con la propia factura como vuelta.
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "\\?crearNota=true"));
         Assert.Contains("href=\"/facturas-venta/FV0001?crearNota=true&returnUrl=%2Ffacturas-venta%2FFV0001\"", html);
-        Assert.DoesNotContain("data-testid=\"crear-nota\"", html);
+        // Y el botón directo de la barra (spec alta rápida): un clic crea la nota total en preparación.
+        Assert.Contains("data-testid=\"crear-nota\"", html);
         Assert.Contains($"href=\"/ventas/movimientos-cliente?socioId={IdCliente}\"", html);
     }
 
@@ -98,6 +99,7 @@ public sealed class AccionesFacturasTests
         Assert.Contains("Factura acreditada por completo.", html);
         Assert.DoesNotContain("crearNota=true", html);
         Assert.DoesNotContain("Nota de crédito de la factura", html);
+        Assert.DoesNotContain("data-testid=\"crear-nota\"", html);
     }
 
     [Fact]
@@ -115,10 +117,13 @@ public sealed class AccionesFacturasTests
         var hostil = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/FV0001?crearNota=true&returnUrl=%2F%2Fevil.com");
 
         Assert.Contains($"href=\"/facturas-venta?socioId={IdCliente}&sel=FV0001\"", conOrigen);
-        Assert.Contains($"href=\"/facturas-venta/FV0001?crearNota=true&returnUrl={origen}\"", conOrigen);
+        // El diálogo ya no tiene campos (spec alta rápida): sin "Limpiar campos"; "Sí, crear" o "Cancelar" (vuelve al origen).
+        Assert.DoesNotContain($"href=\"/facturas-venta/FV0001?crearNota=true&returnUrl={origen}\"", conOrigen);
+        Assert.DoesNotContain("name=\"CrearNotaInput.", conOrigen);
+        Assert.Contains(">Sí, crear</button>", HtmlSsr.Decodificar(conOrigen));
         Assert.Contains("href=\"/facturas-venta/FV0001\"", sinOrigen);
         Assert.DoesNotContain("href=\"//evil.com", hostil);
-        Assert.Contains("href=\"/facturas-venta/FV0001\" class=\"rounded-lg", hostil);
+        Assert.Contains("href=\"/facturas-venta/FV0001\" class=\"btn-press ml-2 rounded-lg", hostil);
     }
 
     [Fact]
@@ -205,7 +210,7 @@ public sealed class AccionesFacturasTests
         Assert.Contains("value=\"FV0001\"", html);
         Assert.DoesNotContain("value=\"PAG-0001\"", html);
         Assert.DoesNotContain("value=\"FV0002\"", html);
-        Assert.Equal($"/notas-credito-venta/borradores/{nota}?ok=creado", FormulariosSsr.Destino(respuesta));
+        Assert.Equal($"/notas-credito-venta/en-preparacion/{nota}?ok=creado", FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
@@ -249,7 +254,7 @@ public sealed class AccionesFacturasTests
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/notas-credito-venta/nueva?socioId={inexistente}");
 
         Assert.Contains("No se encontró el cliente indicado", html);
-        Assert.DoesNotContain("no tiene facturas posteadas con importe pendiente", html);
+        Assert.DoesNotContain("no tiene facturas registradas con importe pendiente", html);
         Assert.DoesNotContain(inexistente.ToString(), html.Replace($"socioId={inexistente}", string.Empty, StringComparison.Ordinal));
         Assert.Contains("href=\"/notas-credito-venta/nueva\"", html);
     }

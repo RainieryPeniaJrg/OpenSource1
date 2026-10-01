@@ -14,14 +14,15 @@ using OpenSource1.SmokeTests.TestInfrastructure;
 
 namespace OpenSource1.SmokeTests.Blazor;
 
-/// <summary>Borrador de nota de crédito en una sola página (spec no-series, Parte 4), Posteada en solo lectura, `/editar` y alta con series.</summary>
+/// <summary>Nota de crédito en preparación en una sola página (spec no-series, Parte 4; spec alta rápida), Registrada en solo lectura, rutas antiguas y alta sin series.</summary>
 public sealed class DocumentoNotaBorradorTests
 {
     private static readonly Guid IdAbierta = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006b1");
     private static readonly Guid IdPosteada = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006b2");
     private static readonly Guid IdSerieNc = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006b3");
     private static readonly Guid IdSerieOtra = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006b4");
-    private static string Url(Guid id) => $"/notas-credito-venta/borradores/{id}";
+    private static string Url(Guid id) => $"/notas-credito-venta/en-preparacion/{id}";
+    private static string UrlAntigua(Guid id) => $"/notas-credito-venta/borradores/{id}";
 
     [Fact]
     public async Task PaginaUnica_CabeceraEditable_ConSerieYProximo_TablaYTotales()
@@ -35,7 +36,9 @@ public sealed class DocumentoNotaBorradorTests
         Assert.Contains("próximo <strong>NC-000004</strong>", html);
         Assert.Contains("data-testid=\"tabla-lineas\"", html);
         Assert.Contains("data-testid=\"totales\"", html);
-        Assert.Contains($"href=\"{Url(IdAbierta)}?postear=true\"", html);
+        Assert.Contains("data-testid=\"registrar\"", html);
+        Assert.Contains("data-testid=\"datos-derivados\"", html);
+        Assert.DoesNotContain("?postear=true", html);
         Assert.Contains($"href=\"{Url(IdAbierta)}?eliminar=true\"", html);
         Assert.DoesNotContain("/editar", html);
     }
@@ -79,16 +82,16 @@ public sealed class DocumentoNotaBorradorTests
     }
 
     [Fact]
-    public async Task Postear_VaALaNota_ConAviso()
+    public async Task Registrar_VaALaNota_ConAviso()
     {
         using var app = Configurar(new BlazorSsrFactory());
         app.Simular<INotaCreditoVentaApiClient>()
             .Setup(c => c.PostearAsync(IdAbierta, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VentaOperationResult<ResultadoPosteoNotaCredito>(true, "ok", new ResultadoPosteoNotaCredito("NC-000004", 50m, 50m, "00000007", "Aviso de NC")));
 
-        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdAbierta)}?postear=true", "confirm-postear", new Dictionary<string, string>());
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdAbierta)}?registrar=true", "confirm-postear", new Dictionary<string, string>());
 
-        Assert.StartsWith("/notas-credito-venta/NC-000004?ok=posteada&aplicado=50.00&aviso=", FormulariosSsr.Destino(respuesta));
+        Assert.StartsWith("/notas-credito-venta/NC-000004?ok=registrada&aplicado=50.00&aviso=", FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
@@ -97,7 +100,7 @@ public sealed class DocumentoNotaBorradorTests
         using var app = Configurar(new BlazorSsrFactory());
         var api = app.Simular<INotaCreditoVentaApiClient>();
 
-        var respuesta = await app.Cliente().GetAsync($"{Url(IdAbierta)}/editar");
+        var respuesta = await app.Cliente().GetAsync($"{UrlAntigua(IdAbierta)}/editar");
         var lista = await HtmlSsr.HtmlAsync(app.Cliente(), "/notas-credito-venta/borradores?estado=3");
 
         Assert.Equal(HttpStatusCode.Redirect, respuesta.StatusCode);
@@ -130,14 +133,14 @@ public sealed class DocumentoNotaBorradorTests
     {
         using var app = Configurar(new BlazorSsrFactory());
 
-        var respuesta = await app.Cliente().GetAsync($"{Url(IdAbierta)}/editar?returnUrl=%2Fnotas-credito-venta%2Fborradores%3Festado%3D3");
+        var respuesta = await app.Cliente().GetAsync($"{UrlAntigua(IdAbierta)}/editar?returnUrl=%2Fnotas-credito-venta%2Fborradores%3Festado%3D3");
 
         Assert.Equal(HttpStatusCode.Redirect, respuesta.StatusCode);
         Assert.Equal($"{Url(IdAbierta)}?returnUrl=%2Fnotas-credito-venta%2Fborradores%3Festado%3D3", FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
-    public async Task Nueva_ConSelectoresDeSerie_EnviaLasDosSeries()
+    public async Task Nueva_SinSelectoresDeSerie_CreaLaNotaTotalConDevolucion()
     {
         using var app = Configurar(new BlazorSsrFactory());
         var socioId = Guid.NewGuid();
@@ -149,22 +152,27 @@ public sealed class DocumentoNotaBorradorTests
             {
                 new() { Id = 1, TipoDocumento = TipoDocumentoCliente.Factura, NumeroDocumento = "FV-000001", ImporteOriginal = 118m, ImporteRestante = 118m, Abierta = true },
             });
-        app.Simular<INotaCreditoVentaApiClient>()
-            .Setup(c => c.CreateBorradorAsync(It.Is<NotaCreditoBorradorInput>(i => i.SerieBorradorId == null && i.SerieRegistroId == IdSerieOtra), It.IsAny<CancellationToken>()))
+        var notas = app.Simular<INotaCreditoVentaApiClient>();
+        notas.Setup(c => c.CreateBorradorAsync(It.IsAny<NotaCreditoBorradorInput>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VentaOperationResult<NotaCreditoVentaBorradorResponse>(true, "ok", new NotaCreditoVentaBorradorResponse { Id = nueva }));
         var url = $"/notas-credito-venta/nueva?socioId={socioId}";
 
-        var html = await HtmlSsr.HtmlAsync(app.Cliente(), url);
+        var html = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), url));
         var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), url, "nueva-nota-socio", new Dictionary<string, string>
         {
-            ["NotaInput.FacturaVentaNumero"] = "FV-000001", ["NotaInput.SerieBorradorId"] = "", ["NotaInput.SerieRegistroId"] = IdSerieOtra.ToString(),
+            ["NotaInput.FacturaVentaNumero"] = "FV-000001",
         });
 
-        Assert.Contains("name=\"NotaInput.SerieBorradorId\"", html);
-        Assert.Contains("name=\"NotaInput.SerieRegistroId\"", html);
-        Assert.Contains("— La configurada —", html);
-        Assert.Contains("NC2 — Sucursal", html);
+        Assert.DoesNotContain("NotaInput.SerieBorradorId", html);
+        Assert.DoesNotContain("NotaInput.SerieRegistroId", html);
+        Assert.DoesNotContain("NotaInput.FechaRegistroTexto", html);
+        Assert.DoesNotContain("NotaInput.Descripcion", html);
+        Assert.Contains(">Crear nota de crédito</button>", html);
         Assert.Equal($"{Url(nueva)}?ok=creado", FormulariosSsr.Destino(respuesta));
+        notas.Verify(c => c.CreateBorradorAsync(
+            It.Is<NotaCreditoBorradorInput>(i => i.FacturaVentaNumero == "FV-000001" && i.CopiarLineas && i.DevolverInventario
+                && i.SerieBorradorId == null && i.SerieRegistroId == null && i.FechaRegistro == null && i.Descripcion == null),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -178,8 +186,10 @@ public sealed class DocumentoNotaBorradorTests
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), Url(IdAbierta));
 
+        Assert.Contains("data-testid=\"registrar\"", html);
         Assert.Contains("data-testid=\"guardar-cabecera\"", html);
-        Assert.Contains($"<option value=\"{IdSerieNc}\" selected=\"selected\">NC (actual)</option>", html);
+        var masOpciones = html[html.IndexOf("data-testid=\"mas-opciones\"", StringComparison.Ordinal)..];
+        Assert.Contains($"<option value=\"{IdSerieNc}\" selected=\"selected\">NC (actual)</option>", masOpciones);
     }
 
     [Fact]
@@ -194,8 +204,10 @@ public sealed class DocumentoNotaBorradorTests
         Assert.Contains("data-testid=\"lineas-documento\"", html);
         Assert.DoesNotContain("data-testid=\"tabla-lineas\"", html);
         Assert.DoesNotContain("data-testid=\"tabla-acreditables\"", html);
+        Assert.DoesNotContain("?registrar=true", html);
         Assert.DoesNotContain("?postear=true", html);
         Assert.DoesNotContain("?eliminar=true", html);
+        Assert.DoesNotContain("data-testid=\"registrar\"", html);
         Assert.DoesNotContain("Acreditar", html);
         Assert.Contains("Serie de registro: <strong>NC</strong>", html);
         Assert.DoesNotContain("Se numerará", html);
@@ -296,8 +308,8 @@ public sealed class DocumentoNotaBorradorTests
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"{Url(IdAbierta)}?eliminar=true");
         var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdAbierta)}?eliminar=true", "delete-borrador-nota", new Dictionary<string, string>());
 
-        Assert.Contains("Sí, eliminar", html);
-        Assert.Equal("/notas-credito-venta/borradores?ok=eliminado", FormulariosSsr.Destino(respuesta));
+        Assert.Contains("Sí, descartar", html);
+        Assert.Equal("/notas-credito-venta?estado=preparacion&ok=descartada", FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
@@ -313,14 +325,16 @@ public sealed class DocumentoNotaBorradorTests
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"{Url(IdAbierta)}?{retorno}");
         var guardado = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdAbierta)}?{retorno}", "guardar-cabecera-nota", Cabecera(IdSerieNc));
         var eliminado = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdAbierta)}?eliminar=true&{retorno}", "delete-borrador-nota", new Dictionary<string, string>());
+        var aRegistrar = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdAbierta)}?{retorno}", "guardar-cabecera-nota",
+            new Dictionary<string, string>(Cabecera(IdSerieNc)) { ["UpdateInput.Accion"] = "registrar" });
 
         Assert.Contains("href=\"/notas-credito-venta/borradores?estado=3\"", html);
         Assert.Contains($"href=\"{Url(IdAbierta)}?eliminar=true&{retorno}\"", html);
-        Assert.Contains($"href=\"{Url(IdAbierta)}?postear=true&{retorno}\"", html);
+        Assert.Equal($"{Url(IdAbierta)}?registrar=true&{retorno}", FormulariosSsr.Destino(aRegistrar));
         Assert.Contains($"<a href=\"{Url(IdAbierta)}?{retorno}\" data-testid=\"limpiar-cabecera\"", html);
         Assert.Contains("<a href=\"/notas-credito-venta/borradores?estado=3\" data-testid=\"cancelar-cabecera\"", html);
         Assert.Equal($"{Url(IdAbierta)}?{retorno}&ok=modificado", FormulariosSsr.Destino(guardado));
-        Assert.Equal("/notas-credito-venta/borradores?estado=3&ok=eliminado", FormulariosSsr.Destino(eliminado));
+        Assert.Equal("/notas-credito-venta/borradores?estado=3&ok=descartada", FormulariosSsr.Destino(eliminado));
     }
 
     [Fact]
@@ -338,7 +352,8 @@ public sealed class DocumentoNotaBorradorTests
         Assert.DoesNotContain("data-testid=\"accion-editar\"", posteada);
         Assert.DoesNotContain("data-testid=\"accion-eliminar\"", posteada);
         Assert.Contains("Posteada", posteada);
-        Assert.Contains($"<a data-testid=\"accion-editar\" href=\"{Url(IdAbierta)}?returnUrl=", abierta);
+        // La lista sigue enlazando la ruta antigua (la lista con pestañas es de R8): redirige a la nota en preparación.
+        Assert.Contains($"<a data-testid=\"accion-editar\" href=\"{UrlAntigua(IdAbierta)}?returnUrl=", abierta);
     }
 
     [Theory]
@@ -356,7 +371,7 @@ public sealed class DocumentoNotaBorradorTests
         var html = HtmlSsr.Decodificar(await respuesta.Content.ReadAsStringAsync());
 
         Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
-        Assert.Contains("No fue posible cargar el borrador; recargue la página.", html);
+        Assert.Contains("No fue posible cargar la nota de crédito en preparación; recargue la página.", html);
         Assert.DoesNotContain("puede haber sido eliminado", html);
     }
 

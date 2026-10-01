@@ -154,33 +154,29 @@ public sealed class DocumentosPosteadosTests
     }
 
     [Fact]
-    public async Task CrearNota_DialogoConSeries_EnviaLasSeriesElegidas()
+    public async Task CrearNota_DesdeLaBarra_SinCampos_CreaLaNotaTotal()
     {
         using var app = Configurar(new BlazorSsrFactory());
-        var serieBorrador = Guid.NewGuid();
-        var serieRegistro = Guid.NewGuid();
-        var series = app.Simular<ISerieApiClient>();
-        series.Setup(c => c.ActivasDelTipoAsync(OpenSource1.Core.Enums.TipoDocumentoSerie.BorradorNotaCreditoVenta, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new OpenSource1.Application.Features.Series.Dtos.SerieResponse { Id = serieBorrador, Codigo = "NCB", Descripcion = "Borradores de nota" }]);
-        series.Setup(c => c.ActivasDelTipoAsync(OpenSource1.Core.Enums.TipoDocumentoSerie.NotaCreditoVenta, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new OpenSource1.Application.Features.Series.Dtos.SerieResponse { Id = serieRegistro, Codigo = "NC", Descripcion = "Notas de crédito" }]);
         var nota = Guid.NewGuid();
         var notas = app.Simular<INotaCreditoVentaApiClient>();
         notas.Setup(c => c.CreateBorradorAsync(It.IsAny<NotaCreditoBorradorInput>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VentaOperationResult<OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Dtos.NotaCreditoVentaBorradorResponse>(
                 true, "ok", new OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Dtos.NotaCreditoVentaBorradorResponse { Id = nota }));
 
-        var html = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/FV-000009?crearNota=true");
+        var html = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/FV-000009?crearNota=true"));
         var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), "/facturas-venta/FV-000009?crearNota=true", "crear-nota",
-            new Dictionary<string, string> { ["CrearNotaInput.SerieBorradorId"] = serieBorrador.ToString(), ["CrearNotaInput.SerieRegistroId"] = "" });
+            new Dictionary<string, string>());
 
-        Assert.Contains("name=\"CrearNotaInput.SerieBorradorId\"", html);
-        Assert.Contains("name=\"CrearNotaInput.SerieRegistroId\"", html);
-        Assert.Contains("— La configurada —", html);
-        Assert.Contains("NC — Notas de crédito", html);
-        Assert.Equal($"/notas-credito-venta/borradores/{nota}?ok=creado", FormulariosSsr.Destino(respuesta));
+        Assert.Contains("Crear nota de crédito", html);
+        Assert.Contains("con todas sus líneas pendientes y la devolución al inventario", html);
+        Assert.DoesNotContain("CrearNotaInput.SerieBorradorId", html);
+        Assert.DoesNotContain("CrearNotaInput.SerieRegistroId", html);
+        Assert.DoesNotContain("CrearNotaInput.FechaRegistroTexto", html);
+        Assert.DoesNotContain("Crear borrador", html);
+        Assert.Equal($"/notas-credito-venta/en-preparacion/{nota}?ok=creado", FormulariosSsr.Destino(respuesta));
         notas.Verify(c => c.CreateBorradorAsync(
-            It.Is<NotaCreditoBorradorInput>(i => i.FacturaVentaNumero == "FV-000009" && i.SerieBorradorId == serieBorrador && i.SerieRegistroId == null),
+            It.Is<NotaCreditoBorradorInput>(i => i.FacturaVentaNumero == "FV-000009" && i.CopiarLineas && i.DevolverInventario
+                && i.SerieBorradorId == null && i.SerieRegistroId == null && i.FechaRegistro == null),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -197,7 +193,9 @@ public sealed class DocumentosPosteadosTests
         Assert.Contains("data-testid=\"lineas-documento\"", html);
         Assert.Contains("La nota de crédito no tiene líneas.", html);
         Assert.Contains("data-testid=\"totales\"", html);
-        Assert.Contains($"href=\"/notas-credito-venta/borradores/{IdBorrador}\"", html);
+        Assert.Contains($"<a class=\"hover:underline\" href=\"/notas-credito-venta/en-preparacion/{IdBorrador}\"", html);
+        Assert.Contains(">Ver preparación</a>", HtmlSsr.Decodificar(html));
+        Assert.DoesNotContain("Borrador de origen", HtmlSsr.Decodificar(html));
         Assert.Contains("data-testid=\"aviso-numeracion\"", html);
         Assert.Contains("quedan 2 número(s)", html);
     }
@@ -354,7 +352,7 @@ public sealed class DocumentosPosteadosTests
         }
 
         Assert.Contains("Factura FV-000009 registrada.", factura);
-        Assert.Contains("Nota de crédito NC-000003 posteada", nota);
+        Assert.Contains("Nota de crédito NC-000003 registrada.", nota);
     }
 
     /// <summary>La fila (tr) de la tabla de líneas que contiene el texto.</summary>

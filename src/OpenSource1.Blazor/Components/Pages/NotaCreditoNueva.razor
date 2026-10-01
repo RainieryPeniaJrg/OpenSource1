@@ -3,7 +3,6 @@
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authorization
 @using OpenSource1.Application.Features.MovimientosCliente.Dtos
-@using OpenSource1.Application.Features.Series.Dtos
 @using OpenSource1.Application.Features.SociosNegocio.Dtos
 @using OpenSource1.Application.Security
 @using OpenSource1.Blazor.Services
@@ -11,14 +10,14 @@
 @inject INotaCreditoVentaApiClient NotaApiClient
 @inject ICobroApiClient CobroApiClient
 @inject ISocioNegocioApiClient SocioApiClient
-@inject ISerieApiClient SerieApiClient
 @inject IAuthorizationService AuthorizationService
 @inject ILogger<NotaCreditoNueva> Logger
 @inject NavigationManager Nav
 
-@* Alta de un borrador de nota de crédito por cliente (Fix-Features C3): se elige el cliente y después una de sus facturas
-   posteadas con importe pendiente (movimientos abiertos de tipo Factura con restante > 0). La API valida el resto. *@
-<EntityFormPage Titulo="Nueva nota de crédito" Subtitulo="Elija una factura posteada con importe pendiente. Se listan las facturas facturadas a este cliente (cliente de facturación), que es a quien se acredita."
+@* Alta secundaria de una nota de crédito por cliente (Fix-Features C3; spec alta rápida): se elige el cliente y después una de sus
+   facturas registradas con importe pendiente (movimientos abiertos de tipo Factura con restante > 0). La nota nace en preparación con
+   todas las líneas pendientes y la devolución al inventario, sin fechas, descripción ni series (las configuradas); la API valida el resto. *@
+<EntityFormPage Titulo="Nueva nota de crédito" Subtitulo="Elija la factura registrada con importe pendiente: la nota se crea con todas sus líneas pendientes y la devolución al inventario; después podrá ajustarla. Se listan las facturas facturadas a este cliente (cliente de facturación), que es a quien se acredita."
                 Migas="@Migas" Mensaje="@message" TipoMensaje="@messageType" Errores="@errores">
     @if (!canAdd)
     {
@@ -74,7 +73,7 @@
         }
         @if (socio is not null && !cargaFallida && facturas.Count == 0)
         {
-            <MessageBox Type="info" Message="El cliente no tiene facturas posteadas con importe pendiente." />
+            <MessageBox Type="info" Message="El cliente no tiene facturas registradas con importe pendiente." />
         }
         else if (facturas.Count > 0)
         {
@@ -92,43 +91,7 @@
                     }
                     <ValidationMessage For="() => NotaInput!.FacturaVentaNumero" />
                 </fieldset>
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700" for="NotaInput_FechaRegistroTexto">Fecha de registro</label>
-                        <input id="NotaInput_FechaRegistroTexto" type="date" name="NotaInput.FechaRegistroTexto" value="@NotaInput!.FechaRegistroTexto" class="@VentasCss.Input" />
-                        <ValidationMessage For="() => NotaInput.FechaRegistroTexto" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700" for="NotaInput_FechaDocumentoTexto">Fecha de documento</label>
-                        <input id="NotaInput_FechaDocumentoTexto" type="date" name="NotaInput.FechaDocumentoTexto" value="@NotaInput.FechaDocumentoTexto" class="@VentasCss.Input" />
-                        <ValidationMessage For="() => NotaInput.FechaDocumentoTexto" />
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label class="mb-1 block text-sm font-medium text-slate-700" for="NotaInput_Descripcion">Descripción</label>
-                        <input id="NotaInput_Descripcion" type="text" name="NotaInput.Descripcion" value="@NotaInput.Descripcion" maxlength="200" class="@VentasCss.Input" />
-                        <ValidationMessage For="() => NotaInput.Descripcion" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700" for="NotaInput_SerieBorradorId">Serie del borrador</label>
-                        <SelectorSerie Id="NotaInput_SerieBorradorId" Name="NotaInput.SerieBorradorId" Series="@seriesBorrador.Items" CargaFallida="@seriesBorrador.CargaFallida"
-                                       Seleccion="@NotaInput.SerieBorradorId" OpcionConfigurada="true" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700" for="NotaInput_SerieRegistroId">Serie de registro</label>
-                        <SelectorSerie Id="NotaInput_SerieRegistroId" Name="NotaInput.SerieRegistroId" Series="@seriesRegistro.Items" CargaFallida="@seriesRegistro.CargaFallida"
-                                       Seleccion="@NotaInput.SerieRegistroId" OpcionConfigurada="true" />
-                    </div>
-                </div>
-                <label class="mt-4 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200" for="NotaInput_CopiarLineas">
-                    <input id="NotaInput_CopiarLineas" type="checkbox" name="NotaInput.CopiarLineas" value="true" checked="@NotaInput.CopiarLineas" class="rounded border-slate-300" />
-                    Copiar todo lo pendiente de la factura (nota total)
-                </label>
-                <label class="mt-2 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200" for="NotaInput_DevolverInventario">
-                    <input id="NotaInput_DevolverInventario" type="checkbox" name="NotaInput.DevolverInventario" value="true" checked="@NotaInput.DevolverInventario" class="rounded border-slate-300" />
-                    Devolver al inventario las líneas de producto copiadas
-                </label>
-                <p class="mt-2 text-xs text-slate-400">Fechas vacías: registro = hoy, documento = registro. La fecha de registro no puede ser anterior a la de la factura. Series vacías: las configuradas para las notas de crédito.</p>
-                <FormularioAcciones CancelarHref="@Volver" LimpiarHref="@Nav.Uri" TextoGuardar="Crear borrador" />
+                <FormularioAcciones CancelarHref="@Volver" LimpiarHref="@Nav.Uri" TextoGuardar="Crear nota de crédito" />
             </EditForm>
         }
     }
@@ -151,8 +114,6 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private OpcionesCargadas<SocioNegocioResponse> socios = OpcionesCargadas<SocioNegocioResponse>.SinCargar;
-    private OpcionesCargadas<SerieResponse> seriesBorrador = OpcionesCargadas<SerieResponse>.SinCargar;
-    private OpcionesCargadas<SerieResponse> seriesRegistro = OpcionesCargadas<SerieResponse>.SinCargar;
     private SocioNegocioResponse? socio;
     private IReadOnlyList<MovimientoClienteResponse> facturas = [];
     private bool cargaFallida;
@@ -163,8 +124,8 @@
     private IReadOnlyList<string> errores = [];
 
     private bool MuestraFormulario => canAdd && SocioId is not null && facturas.Count > 0;
-    private string Volver => RetornoLocal.Volver(ReturnUrl, "/notas-credito-venta/borradores");
-    private IReadOnlyList<Miga> Migas => [new("Facturación", "/modulos/facturacion"), new("Borradores de nota de crédito", Volver), new("Nueva nota de crédito")];
+    private string Volver => RetornoLocal.Volver(ReturnUrl, RutasPreparacion.ListaNotas);
+    private IReadOnlyList<Miga> Migas => [new("Facturación", "/modulos/facturacion"), new("Notas de crédito", "/notas-credito-venta"), new("Nueva nota de crédito")];
 
     // Cambiar de cliente conserva la vuelta (returnUrl) si la hay.
     private string CambiarClienteHref => string.IsNullOrWhiteSpace(ReturnUrl)
@@ -176,7 +137,7 @@
     protected override async Task OnInitializedAsync()
     {
         // El modelo existe antes de cualquier carga asíncrona: el primer render no puede encontrarlo en null.
-        NotaInput ??= new() { CopiarLineas = true };
+        NotaInput ??= new();
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
         canAdd = permisos.CanAdd;
         if (!canAdd)
@@ -211,14 +172,6 @@
             cargaFallida = true;
             Show("danger", "No fue posible cargar las facturas pendientes del cliente; recargue la página.");
         }
-
-        // Series del alta (spec no-series): solo cuando el formulario se muestra. Si no cargan, los selectores quedan en
-        // "— La configurada —" (null) y el alta sigue funcionando con la serie configurada del tipo.
-        if (facturas.Count > 0)
-        {
-            seriesBorrador = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.BorradorNotaCreditoVenta, Logger);
-            seriesRegistro = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.NotaCreditoVenta, Logger);
-        }
     }
 
     private async Task CrearAsync()
@@ -237,12 +190,10 @@
         try
         {
             var result = await NotaApiClient.CreateBorradorAsync(new NotaCreditoBorradorInput(
-                f.FacturaVentaNumero.Trim(), f.FechaRegistro, f.FechaDocumento,
-                string.IsNullOrWhiteSpace(f.Descripcion) ? null : f.Descripcion.Trim(), f.CopiarLineas, f.DevolverInventario,
-                f.SerieBorradorId, f.SerieRegistroId));
+                f.FacturaVentaNumero.Trim(), null, null, null, CopiarLineas: true, DevolverInventario: true));
             if (result.Succeeded)
             {
-                destino = $"/notas-credito-venta/borradores/{result.Valor!.Id}?ok=creado";
+                destino = $"{RutasPreparacion.Nota}/{result.Valor!.Id}?ok=creado";
             }
             else
             {
@@ -252,7 +203,7 @@
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not create nota de crédito from factura {Numero}.", f.FacturaVentaNumero);
-            Show("danger", "No fue posible crear el borrador de nota de crédito.");
+            Show("danger", "No fue posible crear la nota de crédito.");
         }
 
         if (destino is not null)
@@ -268,48 +219,10 @@
         errores = errors ?? [];
     }
 
-    public sealed class NuevaNotaForm : IValidatableObject
+    /// <summary>Alta secundaria: solo la factura (la nota nace total con la devolución; fechas y series por defecto).</summary>
+    public sealed class NuevaNotaForm
     {
         [Required(ErrorMessage = "Seleccione la factura.")]
         public string FacturaVentaNumero { get; set; } = string.Empty;
-
-        public string? FechaRegistroTexto { get; set; }
-
-        public string? FechaDocumentoTexto { get; set; }
-
-        [MaxLength(200, ErrorMessage = "La descripción admite como máximo 200 caracteres.")]
-        public string? Descripcion { get; set; }
-
-        public bool CopiarLineas { get; set; }
-
-        public bool DevolverInventario { get; set; }
-
-        /// <summary>Serie que numera el borrador (tipo BorradorNotaCreditoVenta); null = la configurada.</summary>
-        public Guid? SerieBorradorId { get; set; }
-
-        /// <summary>Serie con la que se numerará la nota al postear (tipo NotaCreditoVenta); null = la configurada.</summary>
-        public Guid? SerieRegistroId { get; set; }
-
-        public DateOnly? FechaRegistro => Fecha(FechaRegistroTexto);
-
-        public DateOnly? FechaDocumento => Fecha(FechaDocumentoTexto);
-
-        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
-        {
-            foreach (var (texto, campo, etiqueta) in new[]
-                     {
-                         (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
-                         (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
-                     })
-            {
-                if (!string.IsNullOrWhiteSpace(texto) && !EntradaFecha.TryParse(texto, out _, out var error, etiqueta))
-                {
-                    yield return new ValidationResult(error ?? $"{etiqueta} no es válida.", [campo]);
-                }
-            }
-        }
-
-        private static DateOnly? Fecha(string? texto) =>
-            !string.IsNullOrWhiteSpace(texto) && EntradaFecha.TryParse(texto, out var valor, out _) ? valor : null;
     }
 }

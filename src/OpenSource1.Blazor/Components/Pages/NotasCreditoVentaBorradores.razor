@@ -332,36 +332,37 @@
         [MaxLength(200, ErrorMessage = "La descripción admite como máximo 200 caracteres.")]
         public string? Descripcion { get; set; }
 
-        /// <summary>Serie con la que se numera la nota al postear (tipo NotaCreditoVenta); null = conservar la actual.</summary>
+        /// <summary>Serie con la que se numerará la nota al registrar (solo el Administrador, en "Más opciones"); null = conservar la actual.</summary>
         public Guid? SerieRegistroId { get; set; }
+
+        /// <summary>Botón que envió la cabecera: <see cref="AccionCabecera.Registrar"/>, <see cref="AccionCabecera.Despues"/> o vacío (guardar y seguir).</summary>
+        public string? Accion { get; set; }
 
         public long Xmin { get; set; }
 
-        public DateOnly? FechaRegistro => Fecha(FechaRegistroTexto);
+        public DateOnly? FechaRegistro => EntradaFecha.Opcional(FechaRegistroTexto);
 
-        public DateOnly? FechaDocumento => Fecha(FechaDocumentoTexto);
+        public DateOnly? FechaDocumento => EntradaFecha.Opcional(FechaDocumentoTexto);
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
-            foreach (var (texto, campo, etiqueta) in new[]
-                     {
-                         (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
-                         (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
-                     })
+            if (string.IsNullOrWhiteSpace(FechaRegistroTexto))
             {
-                if (string.IsNullOrWhiteSpace(texto))
-                {
-                    yield return new ValidationResult($"{etiqueta} es obligatoria al modificar.", [campo]);
-                }
-                else if (!EntradaFecha.TryParse(texto, out _, out var error, etiqueta))
-                {
-                    yield return new ValidationResult(error ?? $"{etiqueta} no es válida.", [campo]);
-                }
+                yield return new ValidationResult("La fecha de registro es obligatoria al modificar.", [nameof(FechaRegistroTexto)]);
+            }
+
+            if (string.IsNullOrWhiteSpace(FechaDocumentoTexto))
+            {
+                yield return new ValidationResult("La fecha de documento es obligatoria al modificar.", [nameof(FechaDocumentoTexto)]);
+            }
+
+            foreach (var resultado in EntradaFecha.Validar(
+                (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
+                (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento")))
+            {
+                yield return resultado;
             }
         }
-
-        private static DateOnly? Fecha(string? texto) =>
-            !string.IsNullOrWhiteSpace(texto) && EntradaFecha.TryParse(texto, out var valor, out _) ? valor : null;
     }
 
     public sealed class DeleteForm

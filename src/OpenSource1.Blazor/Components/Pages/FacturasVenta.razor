@@ -1,7 +1,6 @@
 @page "/facturas-venta"
 @page "/facturas-venta/{Numero}"
 @attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
-@using System.ComponentModel.DataAnnotations
 @using System.Globalization
 @using Microsoft.AspNetCore.Authorization
 @using OpenSource1.Application.Features.FacturasVenta.Calculo
@@ -11,7 +10,6 @@
 @using OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Dtos
 @using OpenSource1.Application.Features.NotasCreditoVenta.Posteadas
 @using OpenSource1.Application.Features.NotasCreditoVenta.Posteadas.Dtos
-@using OpenSource1.Application.Features.Series.Dtos
 @using OpenSource1.Application.Features.SociosNegocio.Dtos
 @using OpenSource1.Application.Security
 @using OpenSource1.Blazor.Services
@@ -20,7 +18,6 @@
 @inject IFacturaVentaApiClient FacturaApiClient
 @inject INotaCreditoVentaApiClient NotaApiClient
 @inject ISocioNegocioApiClient SocioApiClient
-@inject ISerieApiClient SerieApiClient
 @inject IAuthorizationService AuthorizationService
 @inject ILogger<FacturasVenta> Logger
 @inject NavigationManager Nav
@@ -43,6 +40,18 @@ else
                  Migas="@MigasDetalle" Permisos="@permisos"
                  SeleccionId="@detalle?.Cabecera.Numero"
                  Crear="@CrearDetalle" Ver="@VerDetalle" RetornoUrl="@UrlFactura">
+        @* Spec alta rápida: un clic crea la nota de crédito total en preparación; si ya hay una de esta factura, se continúa esa. Con el
+           diálogo ?crearNota=true a la vista no se pinta (un solo formulario "crear-nota" a la vez). *@
+        @if (MuestraContinuarNota)
+        {
+            <a href="@($"{RutasPreparacion.Nota}/{NotaEnPreparacion!.Id}")" data-testid="continuar-nota" class="btn-press rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Continuar nota de crédito</a>
+        }
+        else if (MuestraBotonCrearNota)
+        {
+            <EditForm Model="CrearNotaInput" FormName="crear-nota" OnValidSubmit="CrearNotaAsync">
+                <button type="submit" data-testid="crear-nota" class="btn-press rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Crear nota de crédito</button>
+            </EditForm>
+        }
         <a href="/facturas-venta" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Volver al listado</a>
         <a href="/facturas-venta/borradores" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Borradores</a>
     </PageToolbar>
@@ -209,9 +218,9 @@ else
         <div class="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
             <div>
                 <h2 class="text-sm font-semibold text-slate-700">Notas de crédito</h2>
-                <p class="mt-1 text-xs text-slate-500">@(notasCargaFallida ? "No fue posible cargar las notas de crédito de la factura." : $"{notasFactura.Count} posteada(s) por {VentasOpciones.Importe(notasFactura.Sum(n => n.ImporteTotal))} · {borradoresNota.Count} borrador(es).")</p>
+                <p class="mt-1 text-xs text-slate-500">@(notasCargaFallida ? "No fue posible cargar las notas de crédito de la factura." : $"{notasFactura.Count} registrada(s) por {VentasOpciones.Importe(notasFactura.Sum(n => n.ImporteTotal))} · {borradoresNota.Count} en preparación.")</p>
             </div>
-            @* La nota se crea desde Crear ▾ de la barra (solo con importe pendiente); aquí solo se informa si ya no queda nada. *@
+            @* La nota se crea desde la barra ("Crear nota de crédito" o Crear ▾, solo con importe pendiente); aquí solo se informa si ya no queda nada. *@
             @if (!notasCargaFallida && !TienePendiente)
             {
                 <span class="text-xs font-semibold text-slate-500">Factura acreditada por completo.</span>
@@ -232,7 +241,7 @@ else
                     {
                         <tr @key="n.Numero">
                             <td class="px-4 py-2"><a class="font-mono text-xs font-semibold text-brand-700 underline" href="@($"/notas-credito-venta/{Uri.EscapeDataString(n.Numero)}")">@n.Numero</a></td>
-                            <td class="px-4 py-2 text-xs text-slate-700">Posteada</td>
+                            <td class="px-4 py-2 text-xs text-slate-700">Registrada</td>
                             <td class="px-4 py-2 text-xs text-slate-500">@EntradaFecha.Formatear(n.FechaRegistro)</td>
                             <td class="px-4 py-2 text-right font-semibold text-slate-800">@VentasOpciones.Importe(n.ImporteTotal)</td>
                             <td class="px-4 py-2 font-mono text-xs text-slate-500">@(n.NumeroRegistroContable ?? "—")</td>
@@ -241,8 +250,8 @@ else
                     @foreach (var b in borradoresNota)
                     {
                         <tr @key="b.Id">
-                            <td class="px-4 py-2"><a class="font-mono text-xs font-semibold text-brand-700 underline" href="@($"/notas-credito-venta/borradores/{b.Id}")">@b.Numero</a></td>
-                            <td class="px-4 py-2 text-xs text-amber-700">Borrador (@b.NumeroLineas línea(s))</td>
+                            <td class="px-4 py-2"><a class="font-mono text-xs font-semibold text-brand-700 underline" href="@($"{RutasPreparacion.Nota}/{b.Id}")">@b.Numero</a></td>
+                            <td class="px-4 py-2 text-xs text-amber-700">En preparación (@b.NumeroLineas línea(s))</td>
                             <td class="px-4 py-2 text-xs text-slate-500">@EntradaFecha.Formatear(b.FechaRegistro)</td>
                             <td class="px-4 py-2 text-right text-slate-400">—</td>
                             <td class="px-4 py-2 text-xs text-slate-400">—</td>
@@ -255,54 +264,14 @@ else
 
     @if (MuestraFormCrearNota)
     {
-        <ConfirmDialog Title="Crear nota de crédito" Message="@($"Se creará un borrador de nota de crédito de la factura {c.Numero}. Después podrá elegir las líneas y cantidades a acreditar.")" Variant="warning" CancelHref="@VolverNota">
+        <ConfirmDialog Title="Crear nota de crédito" Message="@($"Se creará una nota de crédito en preparación de la factura {c.Numero} con todas sus líneas pendientes y la devolución al inventario; podrá ajustar las cantidades o quitar líneas antes de registrarla.")" Variant="warning" CancelHref="@VolverNota">
             @if (crearNotaError is not null)
             {
-                <div class="mb-4" data-testid="errores-crear-nota"><MessageBox Type="warning" Message="@crearNotaError" Errors="@crearNotaErrores" /></div>
+                <div class="mb-4" data-testid="errores-crear-nota"><ResumenErrores Mensaje="@crearNotaError" Errores="@crearNotaErrores" /></div>
             }
             <EditForm Model="CrearNotaInput" FormName="crear-nota" OnValidSubmit="CrearNotaAsync" Enhance="true">
-                <DataAnnotationsValidator />
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1" for="CrearNotaInput_FechaRegistroTexto">Fecha de registro</label>
-                        <input id="CrearNotaInput_FechaRegistroTexto" type="date" name="CrearNotaInput.FechaRegistroTexto" value="@CrearNotaInput!.FechaRegistroTexto" class="@InputCss" />
-                        <ValidationMessage For="() => CrearNotaInput.FechaRegistroTexto" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1" for="CrearNotaInput_FechaDocumentoTexto">Fecha de documento</label>
-                        <input id="CrearNotaInput_FechaDocumentoTexto" type="date" name="CrearNotaInput.FechaDocumentoTexto" value="@CrearNotaInput.FechaDocumentoTexto" class="@InputCss" />
-                        <ValidationMessage For="() => CrearNotaInput.FechaDocumentoTexto" />
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label class="block text-sm font-medium text-slate-700 mb-1" for="CrearNotaInput_Descripcion">Descripción</label>
-                        <input id="CrearNotaInput_Descripcion" type="text" name="CrearNotaInput.Descripcion" value="@CrearNotaInput.Descripcion" maxlength="200" class="@InputCss" />
-                        <ValidationMessage For="() => CrearNotaInput.Descripcion" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1" for="CrearNotaInput_SerieBorradorId">Serie del borrador</label>
-                        <SelectorSerie Id="CrearNotaInput_SerieBorradorId" Name="CrearNotaInput.SerieBorradorId" Series="seriesBorradorNota.Items"
-                                       Seleccion="CrearNotaInput.SerieBorradorId" OpcionConfigurada="true" />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1" for="CrearNotaInput_SerieRegistroId">Serie de registro</label>
-                        <SelectorSerie Id="CrearNotaInput_SerieRegistroId" Name="CrearNotaInput.SerieRegistroId" Series="seriesRegistroNota.Items"
-                                       Seleccion="CrearNotaInput.SerieRegistroId" OpcionConfigurada="true" />
-                    </div>
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-700" for="CrearNotaInput_CopiarLineas">
-                        <input id="CrearNotaInput_CopiarLineas" type="checkbox" name="CrearNotaInput.CopiarLineas" value="true" checked="@CrearNotaInput.CopiarLineas" class="rounded border-slate-300" />
-                        Copiar todo lo pendiente (nota total)
-                    </label>
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-700" for="CrearNotaInput_DevolverInventario">
-                        <input id="CrearNotaInput_DevolverInventario" type="checkbox" name="CrearNotaInput.DevolverInventario" value="true" checked="@CrearNotaInput.DevolverInventario" class="rounded border-slate-300" />
-                        Devolver al inventario las líneas de producto copiadas
-                    </label>
-                </div>
-                <p class="mt-2 text-xs text-slate-400">Fechas vacías: registro = hoy, documento = registro. La fecha de registro no puede ser anterior a la de la factura (@EntradaFecha.Formatear(c.FechaRegistro)).</p>
-                <div class="mt-5 flex items-center gap-3">
-                    <button type="submit" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Crear borrador</button>
-                    <a href="@LimpiarNotaHref" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Limpiar campos</a>
-                    <a href="@VolverNota" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</a>
-                </div>
+                <button type="submit" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Sí, crear</button>
+                <a href="@VolverNota" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
             </EditForm>
         </ConfirmDialog>
     }
@@ -325,15 +294,15 @@ else
     <EditForm Model="CopiarInput" FormName="copiar-borrador" OnValidSubmit="CopiarAsync"></EditForm>
 }
 
-@* El formulario de alta de la nota se mantiene en el árbol aunque el permiso o el estado (factura acreditada del todo, diálogo
-   cerrado) no lo muestren: un POST obsoleto o forzado llega al handler y recibe el mensaje real de la API (403/400). *@
-@if (!MuestraFormCrearNota)
+@* El formulario de alta de la nota se mantiene en el árbol aunque el permiso o el estado (factura acreditada del todo, nota ya en
+   preparación, diálogo cerrado) no muestren ni el diálogo ni el botón de la barra: un POST obsoleto o forzado llega al handler y
+   recibe el mensaje real de la API (403/400). *@
+@if (!MuestraFormCrearNota && !MuestraBotonCrearNota)
 {
     <EditForm Model="CrearNotaInput" FormName="crear-nota" OnValidSubmit="CrearNotaAsync"></EditForm>
 }
 
 @code {
-    private const string InputCss = "block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20";
     private const string FiltroCss = "block w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-brand-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20";
 
     [Parameter] public string? Numero { get; set; }
@@ -376,8 +345,6 @@ else
     private bool notasCargaFallida;
     private string? crearNotaError;
     private IReadOnlyList<string> crearNotaErrores = [];
-    private OpcionesCargadas<SerieResponse> seriesBorradorNota = OpcionesCargadas<SerieResponse>.SinCargar;
-    private OpcionesCargadas<SerieResponse> seriesRegistroNota = OpcionesCargadas<SerieResponse>.SinCargar;
     private CopiaFacturaResponse? copia;
 
     private static readonly IReadOnlyList<Miga> MigasListado = [new("Facturación", "/modulos/facturacion"), new("Facturas")];
@@ -454,10 +421,6 @@ else
     /// <summary>Cancelar del diálogo de la nota: vuelve al origen (lista con filtros y selección, o la factura).</summary>
     private string VolverNota => RetornoLocal.Volver(ReturnUrl, UrlFactura);
 
-    private string LimpiarNotaHref => string.IsNullOrWhiteSpace(ReturnUrl)
-        ? $"{UrlFactura}?crearNota=true"
-        : RetornoLocal.ConRetorno($"{UrlFactura}?crearNota=true", VolverNota);
-
     private IReadOnlyList<AccionPagina> VerFactura =>
     [
         new("Detalle", IconosModulo.Documento, id => $"/facturas-venta/{Uri.EscapeDataString(id!)}", null, RequiereSeleccion: true),
@@ -469,7 +432,17 @@ else
         new("Movimientos del cliente", IconosModulo.Lista, _ => $"/ventas/movimientos-cliente?socioId={detalle?.Cabecera.SocioNegocioId}", ApplicationPolicies.CanConsult, RequiereSeleccion: true),
     ];
 
-    private bool MuestraFormCrearNota => detalle is not null && canAdd && CrearNota;
+    /// <summary>Nota de crédito en preparación de esta factura (la lista ya carga solo las de la factura): "Continuar" en vez de crear otra.</summary>
+    private NotaCreditoVentaBorradorResponse? NotaEnPreparacion => borradoresNota.FirstOrDefault();
+
+    /// <summary>Diálogo ?crearNota=true (lo abre Crear ▾): sin campos; no se muestra si ya hay una nota en preparación (se continúa esa).</summary>
+    private bool MuestraFormCrearNota => detalle is not null && canAdd && CrearNota && NotaEnPreparacion is null;
+
+    /// <summary>"Continuar nota de crédito" en la barra: con importe pendiente y una nota de esta factura ya en preparación.</summary>
+    private bool MuestraContinuarNota => canAdd && detalle is not null && TienePendiente && NotaEnPreparacion is not null;
+
+    /// <summary>"Crear nota de crédito" en la barra: con importe pendiente, sin nota en preparación y sin el diálogo a la vista (PF1).</summary>
+    private bool MuestraBotonCrearNota => canAdd && detalle is not null && TienePendiente && NotaEnPreparacion is null && !CrearNota;
 
     /// <summary>Diálogo de Copiar a borrador: con ?copiar=true y CanAdd, mientras no se haya hecho ya la copia (con avisos).</summary>
     private bool MuestraDialogoCopiar => detalle is not null && canAdd && CopiarConfirm && copia is null;
@@ -514,13 +487,6 @@ else
         if (detalle is not null)
         {
             await CargarNotasAsync(detalle.Cabecera.Numero);
-        }
-
-        // Series del diálogo "Crear nota de crédito" (vacío = la configurada): solo cuando el diálogo se muestra.
-        if (MuestraFormCrearNota)
-        {
-            seriesBorradorNota = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.BorradorNotaCreditoVenta, Logger);
-            seriesRegistroNota = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.NotaCreditoVenta, Logger);
         }
 
         if (Ok is "posteada" or "registrada" && detalle is not null)
@@ -581,16 +547,16 @@ else
             return;
         }
 
-        var f = CrearNotaInput!;
+        // Spec alta rápida: la nota nace total (todas las líneas pendientes) con la devolución activada; fechas por defecto y series
+        // configuradas (la página nunca envía series). Se ajusta después en la nota en preparación.
         string? destino = null;
         try
         {
             var result = await NotaApiClient.CreateBorradorAsync(new NotaCreditoBorradorInput(
-                detalle.Cabecera.Numero, f.FechaRegistro, f.FechaDocumento, EmptyAsNull(f.Descripcion), f.CopiarLineas, f.DevolverInventario,
-                f.SerieBorradorId, f.SerieRegistroId));
+                detalle.Cabecera.Numero, null, null, null, CopiarLineas: true, DevolverInventario: true));
             if (result.Succeeded)
             {
-                destino = $"/notas-credito-venta/borradores/{result.Valor!.Id}?ok=creado";
+                destino = $"{RutasPreparacion.Nota}/{result.Valor!.Id}?ok=creado";
             }
             else
             {
@@ -601,7 +567,7 @@ else
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not create nota de crédito from factura {Numero}.", detalle.Cabecera.Numero);
-            crearNotaError = "No fue posible crear el borrador de nota de crédito.";
+            crearNotaError = "No fue posible crear la nota de crédito.";
         }
 
         // R17: la navegación va fuera del try/catch (la NavigationException de SSR no debe tratarse como error).
@@ -745,46 +711,8 @@ else
     {
     }
 
-    /// <summary>Alta de un borrador de nota desde la factura: fechas opcionales (vacías = valores por defecto de la API).</summary>
-    public sealed class CrearNotaForm : IValidatableObject
+    /// <summary>"Crear nota de crédito" desde la factura (spec alta rápida): sin campos, solo el POST con antiforgery.</summary>
+    public sealed class CrearNotaForm
     {
-        public string? FechaRegistroTexto { get; set; }
-
-        public string? FechaDocumentoTexto { get; set; }
-
-        [MaxLength(200, ErrorMessage = "La descripción admite como máximo 200 caracteres.")]
-        public string? Descripcion { get; set; }
-
-        public bool CopiarLineas { get; set; }
-
-        public bool DevolverInventario { get; set; }
-
-        /// <summary>Serie del borrador de nota (null = la configurada).</summary>
-        public Guid? SerieBorradorId { get; set; }
-
-        /// <summary>Serie de registro de la nota (null = la configurada).</summary>
-        public Guid? SerieRegistroId { get; set; }
-
-        public DateOnly? FechaRegistro => Fecha(FechaRegistroTexto);
-
-        public DateOnly? FechaDocumento => Fecha(FechaDocumentoTexto);
-
-        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
-        {
-            foreach (var (texto, campo, etiqueta) in new[]
-                     {
-                         (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
-                         (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
-                     })
-            {
-                if (!string.IsNullOrWhiteSpace(texto) && !EntradaFecha.TryParse(texto, out _, out var error, etiqueta))
-                {
-                    yield return new ValidationResult(error ?? $"{etiqueta} no es válida.", [campo]);
-                }
-            }
-        }
-
-        private static DateOnly? Fecha(string? texto) =>
-            !string.IsNullOrWhiteSpace(texto) && EntradaFecha.TryParse(texto, out var valor, out _) ? valor : null;
     }
 }

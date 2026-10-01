@@ -523,8 +523,8 @@ public sealed class ComponentesDocumentoTests
         Assert.Equal("En preparación", VentasOpciones.Estado(EstadoFacturaBorrador.Abierta));
         Assert.Equal("En preparación (liberada)", VentasOpciones.Estado(EstadoFacturaBorrador.Liberada));
         Assert.Equal("Registrada", VentasOpciones.Estado(EstadoFacturaBorrador.Posteada));
-        Assert.Equal("Abierta", VentasOpciones.EstadoNota(EstadoNotaCreditoBorrador.Abierta));
-        Assert.Equal("Posteada", VentasOpciones.EstadoNota(EstadoNotaCreditoBorrador.Posteada));
+        Assert.Equal("En preparación", VentasOpciones.EstadoNota(EstadoNotaCreditoBorrador.Abierta));
+        Assert.Equal("Registrada", VentasOpciones.EstadoNota(EstadoNotaCreditoBorrador.Posteada));
     }
 
     private sealed class ModeloPrueba

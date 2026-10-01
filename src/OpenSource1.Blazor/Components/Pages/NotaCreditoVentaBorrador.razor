@@ -1,4 +1,4 @@
-@page "/notas-credito-venta/borradores/{BorradorId:guid}"
+@page "/notas-credito-venta/en-preparacion/{BorradorId:guid}"
 @attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
 @using System.Globalization
 @using Microsoft.AspNetCore.Authorization
@@ -14,17 +14,19 @@
 @inject ILogger<NotaCreditoVentaBorrador> Logger
 @inject NavigationManager Nav
 
-<PageTitle>Borrador de nota de crédito – AxionERP</PageTitle>
+<PageTitle>@Titulo – AxionERP</PageTitle>
 
-@* Página única del borrador de nota de crédito (spec no-series, Parte 4): cabecera editable (fechas, descripción y serie de
-   registro), líneas con alta y edición en la propia tabla, totales y posteo. Posteada = solo lectura enlazada a su nota. *@
-<PageToolbar Titulo="@(borrador is null ? "Borrador de nota de crédito" : $"Borrador de nota {borrador.Numero}")"
+@* Nota de crédito en preparación (spec alta rápida; internamente, el borrador): nace de la factura registrada con todas las líneas
+   pendientes; datos de la factura y del cliente en solo lectura; fechas y descripción editables; por línea, cantidad (tope: lo
+   acreditable) y devolución, o Quitar línea; Registrar nota de crédito (confirmación), Guardar para después y Descartar.
+   Registrada = solo lectura enlazada a su nota. Formularios siempre en el árbol: un POST obsoleto o forzado llega al handler y
+   muestra el mensaje real de la API. *@
+<PageToolbar Titulo="@Titulo"
              Subtitulo="@(borrador is null ? null : $"Factura {borrador.FacturaVentaNumero} · {VentasOpciones.EstadoNota(borrador.Estado)}")"
-             Migas="@Migas" Permisos="@permisos" NuevoHref="@null" SeleccionId="@borrador?.Id.ToString()"
-             Ver="@VerDocumento" EliminarUrl="@(PuedeEliminar ? _ => BuildUrl(eliminar: true) : null)">
-    @if (borrador is not null && canModify && !EsPosteada)
+             Migas="@Migas" Permisos="@permisos" NuevoHref="@null" SeleccionId="@borrador?.Id.ToString()" Ver="@VerDocumento">
+    @if (PuedeEliminar)
     {
-        <a href="@BuildUrl(postear: true)" class="btn-press rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Postear</a>
+        <a href="@BuildUrl(eliminar: true)" data-testid="descartar" class="btn-press rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Descartar</a>
     }
     @if (EsPosteada && borrador!.NotaCreditoVentaNumero is { } notaPosteada)
     {
@@ -33,23 +35,22 @@
     <a href="@Volver" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Volver</a>
 </PageToolbar>
 
-@if (!string.IsNullOrWhiteSpace(message))
+@* Un solo resumen de errores a la vez (app.errores.js enfoca el primero): el del registro (en la página o dentro de la confirmación)
+   incluye cualquier otro aviso de la petición; si no, el de la última acción. *@
+@if (!string.IsNullOrWhiteSpace(message) && messageType == "success")
 {
-    <div class="mb-6">
-        @if (messageType == "success")
-        {
-            <ActionFeedback Type="success" Message="@message" />
-        }
-        else
-        {
-            <MessageBox Type="@messageType" Message="@message" Errors="@errores" />
-        }
-    </div>
+    <div class="mb-6"><ActionFeedback Type="success" Message="@message" /></div>
 }
-
-@if (posteoError is not null && !MuestraDialogoPosteo)
+@if (posteoError is not null)
 {
-    <div class="mb-6" data-testid="errores-posteo"><MessageBox Type="warning" Message="@posteoError" Errors="@posteoErrores" /></div>
+    @if (!MuestraDialogoPosteo)
+    {
+        <div data-testid="errores-posteo"><ResumenErrores Mensaje="@posteoError" Errores="@ErroresPosteo" /></div>
+    }
+}
+else if (messageType != "success")
+{
+    <ResumenErrores Mensaje="@message" Errores="@errores" />
 }
 
 @if (loadError is not null)
@@ -59,8 +60,8 @@
 else if (borrador is null)
 {
     <div class="rounded-2xl border border-slate-200 bg-white px-8 py-12 text-center text-slate-400 shadow-sm">
-        <p class="font-semibold text-slate-500">No se encontró el borrador de nota de crédito solicitado (puede haber sido eliminado).</p>
-        <p class="mt-2 text-sm"><a class="underline" href="/notas-credito-venta">Ver las notas de crédito posteadas</a></p>
+        <p class="font-semibold text-slate-500">No se encontró la nota de crédito en preparación (puede haberse registrado o descartado).</p>
+        <p class="mt-2 text-sm"><a class="underline" href="/notas-credito-venta">Ver las notas de crédito registradas</a></p>
     </div>
 }
 else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
@@ -70,14 +71,14 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 
 @* Cabecera: el componente está SIEMPRE en el árbol (sin mostrarse = EditForm vacío con el mismo FormName), para que un POST obsoleto
    o forzado de "guardar-cabecera-nota" llegue al handler y muestre el mensaje real de la API (409/403; Review Focus 5). La nota no
-   tiene opciones imprescindibles: CargaFallida siempre false (F7; el selector conserva la serie actual). *@
+   tiene opciones imprescindibles: CargaFallida siempre false (F7; el selector del Administrador conserva la serie actual). *@
 <DocumentoCabeceraEditable Model="UpdateInput" FormName="guardar-cabecera-nota" OnValidSubmit="GuardarCabeceraAsync"
-                           Mostrar="MuestraFormCabecera" CargaFallida="false">
+                           Mostrar="MuestraFormCabecera" CargaFallida="false" Botones="@BotonesCabecera">
     <input type="hidden" name="UpdateInput.Xmin" value="@UpdateInput!.Xmin" />
-    <p class="mb-4 text-sm text-slate-600 dark:text-slate-300">
-        Factura <a class="font-mono text-brand-700 underline" href="@FacturaHref" data-testid="factura-origen">@borrador?.FacturaVentaNumero</a>
-        (registro @(borrador is null ? "" : EntradaFecha.Formatear(borrador.FacturaFechaRegistro))) · @borrador?.NombreFacturacion
-    </p>
+    <DatosDerivados Datos="@DatosNota" />
+    <NumeracionRegistro Codigo="@borrador?.SerieRegistroCodigo" Proximo="@proximo" PuedeCambiar="@esAdministrador"
+                        Id="UpdateInput_SerieRegistroId" Name="UpdateInput.SerieRegistroId" Series="@seriesRegistro.Items"
+                        Seleccion="@UpdateInput.SerieRegistroId" VigenteId="@borrador?.SerieRegistroId" CargaFallida="@seriesRegistro.CargaFallida" />
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium text-slate-700 mb-1" for="UpdateInput_FechaRegistroTexto">Fecha de registro *</label>
@@ -94,21 +95,8 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
             <input id="UpdateInput_Descripcion" type="text" name="UpdateInput.Descripcion" value="@UpdateInput.Descripcion" maxlength="200" class="@VentasCss.Input" />
             <ValidationMessage For="() => UpdateInput.Descripcion" />
         </div>
-        <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="UpdateInput_SerieRegistroId">Serie de registro</label>
-            <SelectorSerie Id="UpdateInput_SerieRegistroId" Name="UpdateInput.SerieRegistroId" Series="@seriesRegistro.Items" CargaFallida="@seriesRegistro.CargaFallida"
-                           Seleccion="@UpdateInput.SerieRegistroId" VigenteId="@borrador?.SerieRegistroId" VigenteCodigo="@borrador?.SerieRegistroCodigo" />
-        </div>
-        <div class="flex items-end">
-            <SerieNumeracionInfo Codigo="@borrador?.SerieRegistroCodigo" ProximoNumero="@proximo?.Numero" Aviso="@proximo?.Aviso" Error="@proximo?.Error" />
-        </div>
     </div>
     <p class="mt-2 text-xs text-slate-400">La fecha de registro no puede ser anterior a la de la factura y debe estar dentro de las fechas permitidas del usuario.</p>
-    @* Limpiar campos = recargar la página sin lo tecleado (conserva la vuelta); Cancelar = volver al origen. *@
-    <div class="mt-4 flex flex-wrap items-center gap-3">
-        <a href="@UrlPropia" data-testid="limpiar-cabecera" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Limpiar campos</a>
-        <a href="@Volver" data-testid="cancelar-cabecera" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</a>
-    </div>
 </DocumentoCabeceraEditable>
 
 @if (borrador is not null && loadError is null)
@@ -121,11 +109,11 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     @if (EsPosteada)
     {
         <DocumentoLineasLectura TLinea="LineaDocumento" Columnas="ColumnasDocumento.Nota" Lineas="@lineas.OrderBy(l => l.NumeroLinea).Select(LineaDocumento.Desde).ToList()"
-                                TextoVacio="El borrador no tiene líneas." />
+                                TextoVacio="La nota de crédito no tiene líneas." />
     }
     else
     {
-        <!-- ── Líneas del borrador (alta y edición en la propia tabla, NS17) ── -->
+        <!-- ── Líneas de la nota (alta y edición en la propia tabla, NS17) ── -->
         <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
             <div class="px-6 py-4 border-b border-slate-100">
                 <h2 class="text-sm font-semibold text-slate-700">Líneas de la nota</h2>
@@ -153,9 +141,9 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
                     <tbody class="divide-y divide-slate-50 bg-white">
                         @if (lineas.Count == 0)
                         {
-                            <tr><td colspan="@ColumnasTabla" class="px-4 py-8 text-center text-slate-400 text-sm">El borrador todavía no tiene líneas: elija abajo las líneas de la factura a acreditar.</td></tr>
+                            <tr><td colspan="@ColumnasTabla" class="px-4 py-8 text-center text-slate-400 text-sm">La nota todavía no tiene líneas: elija abajo las líneas de la factura a acreditar.</td></tr>
                         }
-                        @foreach (var l in lineas.OrderBy(x => x.NumeroLinea))
+                        @foreach (var (l, i) in lineas.OrderBy(x => x.NumeroLinea).Select((l, i) => (l, i)))
                         {
                             @if (MuestraFormModificar && l.Id == lineaAEditar!.Id)
                             {
@@ -163,7 +151,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
                             }
                             else
                             {
-                                <tr @key="l.Id" class="hover:bg-slate-50">
+                                <tr @key="l.Id" id="linea-@l.NumeroLinea" class="hover:bg-slate-50">
                                     <td class="px-4 py-3 text-slate-400 text-xs">@l.NumeroLinea</td>
                                     <td class="px-4 py-3 text-xs text-slate-700">@VentasOpciones.TipoLinea(l.Tipo)</td>
                                     <td class="px-4 py-3 text-xs text-slate-700">@(l.ProductoCodigo ?? l.CuentaContableNumero ?? "—")</td>
@@ -180,11 +168,11 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
                                         <div class="flex items-center justify-end gap-2">
                                             @if (canModify)
                                             {
-                                                <a href="@BuildUrl(editLineaId: l.Id)" class="btn-press rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100" title="Modificar línea">Modificar</a>
+                                                <a href="@BuildUrl(editLineaId: l.Id)" class="btn-press rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100" title="Modificar línea" aria-label="@($"Modificar línea {i + 1}")">Modificar</a>
                                             }
                                             @if (canDelete)
                                             {
-                                                <a href="@BuildUrl(deleteLineaId: l.Id)" class="btn-press rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100" title="Eliminar línea">Eliminar</a>
+                                                <a href="@BuildUrl(deleteLineaId: l.Id)" aria-label="@($"Quitar línea {i + 1}")" class="btn-press rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Quitar línea</a>
                                             }
                                         </div>
                                     </td>
@@ -210,7 +198,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
                                 <p class="mb-3 text-sm font-bold text-green-800">Acreditar la línea @(lineaAAgregar?.NumeroLinea) de la factura</p>
                                 @if (lineaAAgregar is null)
                                 {
-                                    <MessageBox Type="warning" Message="La línea de factura seleccionada no existe en la factura del borrador o ya no es acreditable." />
+                                    <MessageBox Type="warning" Message="La línea de factura seleccionada no existe en la factura de la nota o ya no es acreditable." />
                                 }
                                 else
                                 {
@@ -233,17 +221,17 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         </div>
     }
 
-    <DocumentoTotales Totales="@(totales is null ? null : TotalesDocumento.Desde(totales, lineas.Sum(l => l.ImporteDescuentoLinea)))" Titulo="Total a acreditar" />
+    <DocumentoTotales Totales="@(totales is null ? null : TotalesDocumento.Desde(totales, lineas.Sum(l => l.ImporteDescuentoLinea)))" Titulo="@(EsPosteada ? "Total acreditado" : "Total a acreditar (vista previa)")" />
 
     @if (!EsPosteada)
     {
-        <p class="-mt-4 mb-6 px-1 text-xs text-slate-500" data-testid="aviso-importes">Vista previa: los importes definitivos se calculan al postear, descontando lo ya acreditado de la factura.</p>
+        <p class="-mt-4 mb-6 px-1 text-xs text-slate-500" data-testid="aviso-importes">Vista previa: los importes definitivos se calculan al registrar, descontando lo ya acreditado de la factura.</p>
 
         <!-- ── Líneas de la factura (acreditables) ── -->
         <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
             <div class="px-6 py-4 border-b border-slate-100">
                 <h2 class="text-sm font-semibold text-slate-700">Líneas de la factura @borrador.FacturaVentaNumero</h2>
-                <p class="mt-1 text-xs text-slate-500">Lo ya acreditado cuenta solo las notas posteadas. Cada línea de la factura se acredita una vez por borrador.</p>
+                <p class="mt-1 text-xs text-slate-500">Lo ya acreditado cuenta solo las notas registradas. Cada línea de la factura se acredita una vez por nota.</p>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-100 text-sm" data-testid="tabla-acreditables">
@@ -256,7 +244,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
                             <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Facturada</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Acreditada</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Pendiente</th>
-                            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">En este borrador</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">En esta nota</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Acción</th>
                         </tr>
                     </thead>
@@ -292,26 +280,25 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 
     @if (MuestraDialogoPosteo)
     {
-        <ConfirmDialog Title="Confirmar posteo de la nota de crédito" Message="Se generará la nota de crédito legal con su número, la devolución de inventario de las líneas marcadas, el movimiento del cliente (aplicado a la factura) y el asiento inverso. Esta acción no se puede deshacer." Variant="success" CancelHref="@UrlPropia">
-            @if (posteoError is not null)
-            {
-                <div class="mb-4" data-testid="errores-posteo"><MessageBox Type="warning" Message="@posteoError" Errors="@posteoErrores" /></div>
-            }
-            <p class="rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-900">@borrador.Numero — factura @borrador.FacturaVentaNumero — @borrador.NombreFacturacion (@lineas.Count línea(s))@(totales is null ? "" : $" · Total {VentasOpciones.Importe(totales.ImporteTotal)}")</p>
-            <EditForm Model="PostearInput" FormName="confirm-postear" OnValidSubmit="PostearAsync" class="mt-4">
-                <button type="submit" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Sí, postear</button>
-                <a href="@UrlPropia" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
-            </EditForm>
-        </ConfirmDialog>
+        <ConfirmarRegistro Titulo="Registrar nota de crédito"
+                           Aviso="Se generará la nota de crédito con su asiento, se aplicará a la factura y se devolverá al inventario lo marcado; no se puede deshacer."
+                           Resumen="@ResumenRegistro" Model="PostearInput" FormName="confirm-postear" OnValidSubmit="PostearAsync" SeguirEditandoHref="@UrlPropia">
+            <Errores>
+                @if (posteoError is not null)
+                {
+                    <div data-testid="errores-posteo"><ResumenErrores Mensaje="@posteoError" Errores="@ErroresPosteo" /></div>
+                }
+            </Errores>
+        </ConfirmarRegistro>
     }
 
     @if (MuestraDialogoBorrarLinea)
     {
-        <ConfirmDialog Title="Confirmar eliminación" Message="Esta acción eliminará la línea seleccionada del borrador de nota de crédito." Variant="danger" CancelHref="@UrlPropia">
+        <ConfirmDialog Title="Quitar línea" Message="Esta acción quitará la línea seleccionada de la nota de crédito." Variant="danger" CancelHref="@UrlPropia">
             <p class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-900">@(lineaAEliminar is null ? DeleteLineaId?.ToString() : $"Línea {lineaAEliminar.NumeroLinea} — {VentasOpciones.TipoLinea(lineaAEliminar.Tipo)}: {lineaAEliminar.Descripcion}")</p>
             <EditForm Model="DeleteInputLinea" FormName="delete-linea" OnValidSubmit="DeleteLineaAsync" class="mt-4">
                 <input type="hidden" name="DeleteInputLinea.Id" value="@DeleteLineaId" />
-                <button type="submit" class="btn-press rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Sí, eliminar</button>
+                <button type="submit" class="btn-press rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Sí, quitar</button>
                 <a href="@UrlPropia" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
             </EditForm>
         </ConfirmDialog>
@@ -319,16 +306,16 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 
     @if (MuestraDialogoEliminar)
     {
-        <ConfirmDialog Title="Eliminar borrador" Message="@($"Se eliminará el borrador {borrador.Numero} con todas sus líneas.")" Variant="danger" CancelHref="@UrlPropia">
+        <ConfirmDialog Title="Descartar nota de crédito" Message="Se descartará la nota de crédito en preparación con todas sus líneas. No se puede deshacer." Variant="danger" CancelHref="@UrlPropia">
             <EditForm Model="DeleteInput" FormName="delete-borrador-nota" OnValidSubmit="EliminarBorradorAsync" class="mt-4">
-                <button type="submit" class="btn-press rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Sí, eliminar</button>
+                <button type="submit" class="btn-press rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Sí, descartar</button>
                 <a href="@UrlPropia" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
             </EditForm>
         </ConfirmDialog>
     }
 }
 
-@* Formularios de acción que el estado (borrador posteado/eliminado, línea borrada) o el permiso ya no dejan mostrar: EditForm vacío
+@* Formularios de acción que el estado (nota registrada o descartada, línea quitada) o el permiso ya no dejan mostrar: EditForm vacío
    con el MISMO FormName y handler, para que un POST obsoleto, doble o forzado llegue al handler y reciba el mensaje real (404/409/
    400/403 de la API) en vez del 400 genérico de Blazor (NS-S11c: también en Posteada). La autorización real la hace la API.
    "guardar-cabecera-nota" no va aquí: DocumentoCabeceraEditable ya lo mantiene siempre en el árbol. *@
@@ -354,9 +341,9 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 }
 
 @code {
-    private const string BorradorNoDisponible = "No se encontró el borrador de nota de crédito: puede haber sido eliminado por otro usuario.";
+    private const string BorradorNoDisponible = "No se encontró la nota de crédito en preparación: puede haberse registrado o descartado por otro usuario.";
     /// <summary>Guarda de los POST sin borrador: si la carga falló (loadError) no se sabe si existe, así que se pide recargar.</summary>
-    private string BorradorNoCargado => loadError is null ? BorradorNoDisponible : "No fue posible cargar el borrador; recargue la página.";
+    private string BorradorNoCargado => loadError is null ? BorradorNoDisponible : "No fue posible cargar la nota de crédito en preparación; recargue la página.";
     private const string InputCss = "block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20";
 
     /// <summary>Columnas de la tabla editable de líneas (colspan de las filas de alta y edición).</summary>
@@ -368,7 +355,9 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     [SupplyParameterFromQuery(Name = "addLineaId")] private long? AddLineaId { get; set; }
     [SupplyParameterFromQuery(Name = "editLineaId")] private Guid? EditLineaId { get; set; }
     [SupplyParameterFromQuery(Name = "deleteLineaId")] private Guid? DeleteLineaId { get; set; }
-    [SupplyParameterFromQuery(Name = "postear")] private bool PostearConfirm { get; set; }
+    [SupplyParameterFromQuery(Name = "registrar")] private bool RegistrarConfirm { get; set; }
+    // Enlaces de la versión anterior (?postear=true) siguen abriendo la confirmación.
+    [SupplyParameterFromQuery(Name = "postear")] private bool PostearLegado { get; set; }
     [SupplyParameterFromQuery(Name = "eliminar")] private bool EliminarConfirm { get; set; }
     [SupplyParameterFromQuery(Name = "returnUrl")] private string? ReturnUrl { get; set; }
 
@@ -379,11 +368,13 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     [SupplyParameterFromForm(FormName = "confirm-postear")] private AccionForm? PostearInput { get; set; }
     [SupplyParameterFromForm(FormName = "delete-borrador-nota")] private AccionForm? DeleteInput { get; set; }
 
-    private string UrlBase => $"/notas-credito-venta/borradores/{BorradorId}";
+    private string UrlBase => $"{RutasPreparacion.Nota}/{BorradorId}";
 
     /// <summary>Esta página sin acciones transitorias, conservando el returnUrl (Cancelar de los diálogos y destinos ?ok=).</summary>
     private string UrlPropia => BuildUrl();
-    private string Volver => RetornoLocal.Volver(ReturnUrl, "/notas-credito-venta/borradores");
+    private string Volver => RetornoLocal.Volver(ReturnUrl, RutasPreparacion.ListaNotas);
+
+    private string Titulo => borrador is null || !EsPosteada ? "Nota de crédito en preparación" : $"Preparación de la nota {borrador.NotaCreditoVentaNumero}";
     private string? FacturaHref => borrador is null ? null : $"/facturas-venta/{Uri.EscapeDataString(borrador.FacturaVentaNumero)}";
     private static string NotaHref(string numero) => $"/notas-credito-venta/{Uri.EscapeDataString(numero)}";
 
@@ -396,7 +387,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 
     private bool MuestraFormModificar => borrador is not null && canModify && !EsPosteada && EditLineaId.HasValue && lineaAEditar is not null;
 
-    private bool MuestraDialogoPosteo => borrador is not null && PostearConfirm && canModify && !EsPosteada;
+    private bool MuestraDialogoPosteo => borrador is not null && (RegistrarConfirm || PostearLegado) && canModify && !EsPosteada;
 
     private bool MuestraDialogoBorrarLinea => borrador is not null && DeleteLineaId.HasValue && canDelete && !EsPosteada;
 
@@ -405,7 +396,40 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     private bool MuestraDialogoEliminar => EliminarConfirm && PuedeEliminar;
 
     private IReadOnlyList<Miga> Migas =>
-        [new("Facturación", "/modulos/facturacion"), new("Borradores de nota de crédito", Volver), new(borrador?.Numero ?? "Borrador")];
+        [new("Facturación", "/modulos/facturacion"), new("Notas de crédito", "/notas-credito-venta"), new("En preparación", RutasPreparacion.ListaNotas), new(borrador?.NombreFacturacion ?? "Nota de crédito")];
+
+    /// <summary>Datos de la factura y del cliente en solo lectura (spec alta rápida).</summary>
+    private IReadOnlyList<DatoDerivado> DatosNota => borrador is null ? [] :
+    [
+        new("Factura de origen", borrador.FacturaVentaNumero, FacturaHref),
+        new("Cliente", $"{borrador.SocioNegocioCodigo} — {borrador.NombreFacturacion}", $"/clientes/{borrador.SocioNegocioFacturarAId}"),
+        new("RNC / razón social", DatosDocumento.Fiscal(borrador.RazonSocialFacturacion, borrador.NumeroDocumentoFiscal)),
+        new("Moneda", borrador.Moneda),
+        new("Cuenta por cobrar", borrador.CuentaCxCNumero ?? "—"),
+        new("Total de la factura", VentasOpciones.Importe(borrador.FacturaImporteTotal)),
+    ];
+
+    /// <summary>Botones de la tarjeta (BotonesPreparacion, compartido con la factura).</summary>
+    private RenderFragment BotonesCabecera => __builder =>
+    {
+        <BotonesPreparacion TextoRegistrar="Registrar nota de crédito" Prefijo="UpdateInput" Proximo="@proximo" LimpiarHref="@UrlPropia" CancelarHref="@Volver" />
+    };
+
+    /// <summary>
+    /// Resumen de la confirmación de "Registrar nota de crédito". El total es la vista previa: el definitivo se calcula al registrar
+    /// (descontando lo ya acreditado de la factura).
+    /// </summary>
+    private IReadOnlyList<DatoDerivado> ResumenRegistro => borrador is null ? [] :
+    [
+        new("Total (vista previa)", totales is null ? "—" : VentasOpciones.Importe(totales.ImporteTotal)),
+        new("Factura de origen", borrador.FacturaVentaNumero),
+        new("Serie", borrador.SerieRegistroCodigo ?? "—"),
+        new("Próximo número", proximo?.Numero ?? "—"),
+    ];
+
+    /// <summary>Errores del registro más cualquier otro aviso de la misma petición: un solo resumen de errores a la vez.</summary>
+    private IReadOnlyList<string> ErroresPosteo =>
+        !string.IsNullOrWhiteSpace(message) && messageType != "success" ? [.. posteoErrores, message, .. errores] : posteoErrores;
 
     private IReadOnlyList<AccionPagina> VerDocumento => borrador is null ? [] :
     [
@@ -452,6 +476,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     private bool canAdd;
     private bool canModify;
     private bool canDelete;
+    private bool esAdministrador;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
@@ -468,6 +493,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
         (canAdd, canModify, canDelete) = (permisos.CanAdd, permisos.CanModify, permisos.CanDelete);
+        esAdministrador = await permisos.PuedeAsync(ApplicationPolicies.CanAdministrar);
 
         try
         {
@@ -476,7 +502,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not load borrador de nota {Id}.", BorradorId);
-            loadError = "No fue posible cargar el borrador de nota de crédito.";
+            loadError = "No fue posible cargar la nota de crédito en preparación.";
             return;
         }
 
@@ -492,7 +518,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not load líneas of borrador de nota {Id}.", BorradorId);
-            Show("danger", "No fue posible cargar las líneas del borrador.");
+            Show("danger", "No fue posible cargar las líneas de la nota de crédito.");
         }
 
         // Posteada: solo lectura, sin líneas acreditables ni próximo número.
@@ -525,14 +551,19 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 
         if (MuestraFormCabecera)
         {
-            seriesRegistro = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.NotaCreditoVenta, Logger);
+            // "Cambiar serie de registro" solo para el Administrador (spec alta rápida, Parte 1.4).
+            if (esAdministrador)
+            {
+                seriesRegistro = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.NotaCreditoVenta, Logger);
+            }
+
             // Solo se rellena con lo guardado cuando NO llegó el formulario de la cabecera (Xmin = 0).
             if (UpdateInput.Xmin == 0)
             {
                 UpdateInput.FechaRegistroTexto = EntradaFecha.Formatear(borrador.FechaRegistro);
                 UpdateInput.FechaDocumentoTexto = EntradaFecha.Formatear(borrador.FechaDocumento);
                 UpdateInput.Descripcion = borrador.Descripcion;
-                UpdateInput.SerieRegistroId = borrador.SerieRegistroId;
+                UpdateInput.SerieRegistroId = esAdministrador ? borrador.SerieRegistroId : null;
                 UpdateInput.Xmin = borrador.Xmin;
             }
         }
@@ -541,11 +572,11 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         {
             (messageType, message) = Ok switch
             {
-                "creado" => ("success", "Borrador de nota de crédito creado. Elija las líneas de la factura a acreditar."),
-                "modificado" => ("success", "Cabecera guardada."),
+                "creado" => ("success", "Nota de crédito en preparación con todas las líneas pendientes de la factura. Ajuste las cantidades o quite líneas para una nota parcial."),
+                "modificado" => ("success", "Cambios guardados."),
                 "linea_creada" => ("success", "Línea agregada satisfactoriamente."),
                 "linea_modificada" => ("success", "Línea modificada satisfactoriamente."),
-                "linea_eliminada" => ("success", "Línea eliminada satisfactoriamente."),
+                "linea_eliminada" => ("success", "Línea quitada."),
                 _ => ("info", null)
             };
         }
@@ -636,11 +667,37 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
             return;
         }
 
-        // Sin permiso o con el borrador ya posteado el formulario está vacío en el árbol: el POST (forzado u obsoleto) va a la API
-        // igualmente y la página muestra su mensaje real (403/409/400; Review Focus 5).
+        // Sin permiso o con la nota ya registrada el formulario está vacío en el árbol: el POST (forzado u obsoleto) va a la API
+        // igualmente y la página muestra su mensaje real (403/409/400; Review Focus 5). La serie de registro solo viaja si la eligió
+        // el Administrador en "Más opciones" (null = conservar la actual).
         var f = UpdateInput!;
-        var input = new NotaCreditoCabeceraInput(f.FechaRegistro, f.FechaDocumento, f.Descripcion?.Trim() ?? string.Empty, f.SerieRegistroId);
-        await EjecutarAsync(() => NotaApiClient.UpdateBorradorAsync(BorradorId, input, f.Xmin), "modificado", "No fue posible guardar la cabecera.");
+        var input = new NotaCreditoCabeceraInput(
+            f.FechaRegistro, f.FechaDocumento, f.Descripcion?.Trim() ?? string.Empty, esAdministrador ? f.SerieRegistroId : null);
+
+        // R17: el destino se calcula dentro del try y la navegación va DESPUÉS del try/catch.
+        string? destino = null;
+        try
+        {
+            var result = await NotaApiClient.UpdateBorradorAsync(BorradorId, input, f.Xmin);
+            if (result.Succeeded)
+            {
+                destino = RutasPreparacion.DestinoTrasGuardar(f.Accion, BuildUrl(registrar: true), BuildUrl(), RutasPreparacion.ListaNotas);
+            }
+            else
+            {
+                Show("warning", result.Message, result.Errors);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not update nota de crédito en preparación {Id}.", BorradorId);
+            Show("danger", "No fue posible guardar los cambios.");
+        }
+
+        if (destino is not null)
+        {
+            Nav.NavigateTo(destino);
+        }
     }
 
     private async Task CreateLineaAsync()
@@ -654,7 +711,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         var f = AddInput!;
         if (EsPosteada)
         {
-            // POST obsoleto sobre un borrador ya posteado (Review Focus 5): va a la API, que responde con su conflicto real (409).
+            // POST obsoleto sobre una nota ya registrada (Review Focus 5): va a la API, que responde con su conflicto real (409).
             await EjecutarAsync(
                 () => NotaApiClient.CreateLineaAsync(BorradorId, f.LineaFacturaVentaId, f.Cantidad, f.DevolverInventario),
                 "linea_creada", "No fue posible agregar la línea.");
@@ -683,7 +740,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         var f = UpdateInputLinea!;
         if (EsPosteada && EditLineaId is { } lineaObsoleta)
         {
-            // POST obsoleto sobre un borrador ya posteado (Review Focus 5): va a la API, que responde con su conflicto real (409).
+            // POST obsoleto sobre una nota ya registrada (Review Focus 5): va a la API, que responde con su conflicto real (409).
             await EjecutarAsync(
                 () => NotaApiClient.UpdateLineaAsync(lineaObsoleta, f.Cantidad, f.DevolverInventario, f.Xmin),
                 "linea_modificada", "No fue posible modificar la línea.");
@@ -702,7 +759,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     }
 
     private async Task DeleteLineaAsync() =>
-        await EjecutarAsync(() => NotaApiClient.DeleteLineaAsync(DeleteInputLinea!.Id), "linea_eliminada", "No fue posible eliminar la línea.");
+        await EjecutarAsync(() => NotaApiClient.DeleteLineaAsync(DeleteInputLinea!.Id), "linea_eliminada", "No fue posible quitar la línea.");
 
     private async Task EliminarBorradorAsync()
     {
@@ -713,18 +770,17 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
             var result = await NotaApiClient.DeleteBorradorAsync(BorradorId);
             if (result.Succeeded)
             {
-                destino = RetornoLocal.ConParametro(Volver, "ok", "eliminado");
+                destino = RetornoLocal.ConParametro(Volver, "ok", "descartada");
             }
             else
             {
-                errores = result.Errors ?? [];
-                Show("warning", result.Message);
+                Show("warning", result.Message, result.Errors);
             }
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not delete borrador de nota {Id}.", BorradorId);
-            Show("danger", "No fue posible eliminar el borrador.");
+            Show("danger", "No fue posible descartar la nota de crédito.");
         }
 
         if (destino is not null)
@@ -744,9 +800,9 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
             {
                 var r = result.Valor!;
                 // El registro contable lo lee la nota del documento. El aviso de numeración (número de aviso de la serie alcanzado,
-                // NS4) lo muestra la nota posteada solo si conserva la forma que genera el posteo (CalculoNumeroSerie.EsTextoAviso).
+                // NS4) lo muestra la nota registrada solo si conserva la forma que genera el posteo (CalculoNumeroSerie.EsTextoAviso).
                 var aviso = r.AvisoNumeracion is { } textoAviso ? $"&aviso={Uri.EscapeDataString(textoAviso)}" : string.Empty;
-                destino = $"{NotaHref(r.Numero)}?ok=posteada&aplicado={r.ImporteAplicado.ToString("0.00", CultureInfo.InvariantCulture)}{aviso}";
+                destino = $"{NotaHref(r.Numero)}?ok=registrada&aplicado={r.ImporteAplicado.ToString("0.00", CultureInfo.InvariantCulture)}{aviso}";
             }
             else
             {
@@ -757,7 +813,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not postear borrador de nota {Id}.", BorradorId);
-            posteoError = "No fue posible postear la nota de crédito.";
+            posteoError = "No fue posible registrar la nota de crédito.";
         }
 
         if (destino is not null)
@@ -779,8 +835,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
             }
             else
             {
-                errores = result.Errors ?? [];
-                Show("warning", result.Message);
+                Show("warning", result.Message, result.Errors);
             }
         }
         catch (Exception ex)
@@ -795,22 +850,27 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
         }
     }
 
-    private string BuildUrl(long? addLineaId = null, Guid? editLineaId = null, Guid? deleteLineaId = null, bool? postear = null, bool? eliminar = null)
+    private string BuildUrl(long? addLineaId = null, Guid? editLineaId = null, Guid? deleteLineaId = null, bool? registrar = null, bool? eliminar = null)
     {
         var parameters = new List<string>();
         if (addLineaId.HasValue) parameters.Add($"addLineaId={addLineaId.Value}");
         if (editLineaId.HasValue) parameters.Add($"editLineaId={editLineaId.Value}");
         if (deleteLineaId.HasValue) parameters.Add($"deleteLineaId={deleteLineaId.Value}");
-        if (postear == true) parameters.Add("postear=true");
+        if (registrar == true) parameters.Add("registrar=true");
         if (eliminar == true) parameters.Add("eliminar=true");
-        // La vuelta (returnUrl, validada: solo rutas locales) acompaña a todas las URL de la página (como en el borrador de factura).
+        // La vuelta (returnUrl, validada: solo rutas locales) acompaña a todas las URL de la página (como en la factura en preparación).
         if (!string.IsNullOrWhiteSpace(ReturnUrl)) parameters.Add($"returnUrl={Uri.EscapeDataString(Volver)}");
         return parameters.Count == 0 ? UrlBase : $"{UrlBase}?{string.Join("&", parameters)}";
     }
 
     private static string Cantidad(decimal valor) => valor.ToString("0.######", CultureInfo.InvariantCulture);
 
-    private void Show(string type, string? text) { messageType = type; message = text; }
+    private void Show(string type, string? text, IReadOnlyList<string>? errors = null)
+    {
+        messageType = type;
+        message = text;
+        errores = errors ?? [];
+    }
 
     public sealed class DeleteLineaForm
     {

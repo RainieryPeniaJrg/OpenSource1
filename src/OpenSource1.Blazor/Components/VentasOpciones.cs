@@ -116,8 +116,8 @@ public static class VentasOpciones
 
     public static string EstadoNota(EstadoNotaCreditoBorrador estado) => estado switch
     {
-        EstadoNotaCreditoBorrador.Abierta => "Abierta",
-        EstadoNotaCreditoBorrador.Posteada => "Posteada",
+        EstadoNotaCreditoBorrador.Abierta => "En preparación",
+        EstadoNotaCreditoBorrador.Posteada => "Registrada",
         _ => estado.ToString()
     };
 
