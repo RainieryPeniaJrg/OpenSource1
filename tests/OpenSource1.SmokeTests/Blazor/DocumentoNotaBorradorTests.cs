@@ -32,7 +32,7 @@ public sealed class DocumentoNotaBorradorTests
 
         Assert.Contains("name=\"_handler\" value=\"guardar-cabecera-nota\"", html);
         Assert.Contains("name=\"UpdateInput.SerieRegistroId\"", html);
-        Assert.Contains("Próximo número: <strong>NC-000004</strong>", html);
+        Assert.Contains("próximo <strong>NC-000004</strong>", html);
         Assert.Contains("data-testid=\"tabla-lineas\"", html);
         Assert.Contains("data-testid=\"totales\"", html);
         Assert.Contains($"href=\"{Url(IdAbierta)}?postear=true\"", html);
@@ -198,7 +198,7 @@ public sealed class DocumentoNotaBorradorTests
         Assert.DoesNotContain("?eliminar=true", html);
         Assert.DoesNotContain("Acreditar", html);
         Assert.Contains("Serie de registro: <strong>NC</strong>", html);
-        Assert.DoesNotContain("Próximo número", html);
+        Assert.DoesNotContain("Se numerará", html);
         Assert.Contains("value=\"add-linea\"", html);
         Assert.Contains("value=\"update-linea\"", html);
         Assert.Contains("value=\"delete-linea\"", html);

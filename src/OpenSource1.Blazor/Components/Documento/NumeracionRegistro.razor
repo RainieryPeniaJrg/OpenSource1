@@ -1,0 +1,38 @@
+@using OpenSource1.Application.Features.Series.Dtos
+@* Serie de registro en solo lectura (SerieNumeracionInfo) y, SOLO para el Administrador (CanAdministrar), "Cambiar serie de registro"
+   con el SelectorSerie dentro de "Más opciones" (spec alta rápida, Parte 1.4). Sin PuedeCambiar no se pinta ningún campo: la página no
+   envía serie y la API usa la configurada (o conserva la del documento). Va DENTRO del EditForm cuando PuedeCambiar. *@
+<div class="mb-4" data-testid="numeracion-registro">
+    @if (MostrarInfo)
+    {
+        <SerieNumeracionInfo Codigo="@Codigo" ProximoNumero="@Proximo?.Numero" Aviso="@Proximo?.Aviso" Error="@Proximo?.Error" />
+    }
+    @if (PuedeCambiar)
+    {
+        <details class="mt-2" data-testid="mas-opciones">
+            <summary class="cursor-pointer text-xs font-semibold text-slate-600">Más opciones</summary>
+            <div class="mt-2 max-w-sm">
+                <label class="mb-1 block text-sm font-medium text-slate-700" for="@Id">Cambiar serie de registro</label>
+                <SelectorSerie Id="@Id" Name="@Name" Series="@Series" Seleccion="@Seleccion" VigenteId="@VigenteId" VigenteCodigo="@Codigo"
+                               OpcionConfigurada="@(VigenteId is null)" CargaFallida="@CargaFallida" />
+            </div>
+        </details>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Codigo { get; set; }
+    [Parameter] public ProximoVista? Proximo { get; set; }
+    /// <summary>false = solo "Más opciones" (la línea de numeración ya se muestra fuera del formulario, p. ej. en el alta rápida).</summary>
+    [Parameter] public bool MostrarInfo { get; set; } = true;
+    /// <summary>CanAdministrar: muestra "Más opciones" con el selector.</summary>
+    [Parameter] public bool PuedeCambiar { get; set; }
+    [Parameter] public string Id { get; set; } = string.Empty;
+    /// <summary>Nombre del campo del formulario (p. ej. <c>UpdateInput.SerieRegistroId</c>).</summary>
+    [Parameter] public string Name { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<SerieResponse> Series { get; set; } = [];
+    [Parameter] public Guid? Seleccion { get; set; }
+    /// <summary>Serie guardada en el documento (null en el alta: la opción vacía "— La configurada —").</summary>
+    [Parameter] public Guid? VigenteId { get; set; }
+    [Parameter] public bool CargaFallida { get; set; }
+}

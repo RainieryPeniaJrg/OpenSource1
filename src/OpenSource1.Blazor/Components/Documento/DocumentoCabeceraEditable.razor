@@ -14,7 +14,14 @@
             @ChildContent
             @if (!CargaFallida)
             {
-                <div class="mt-4"><button type="submit" data-testid="guardar-cabecera" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">@TextoGuardar</button></div>
+                @if (Botones is not null)
+                {
+                    <div class="mt-4 flex flex-wrap items-center gap-3" data-testid="cabecera-botones">@Botones</div>
+                }
+                else
+                {
+                    <div class="mt-4"><button type="submit" data-testid="guardar-cabecera" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">@TextoGuardar</button></div>
+                }
             }
         </EditForm>
     </div>
@@ -35,6 +42,8 @@ else
     [Parameter] public bool CargaFallida { get; set; }
     [Parameter] public string MensajeCargaFallida { get; set; } = "No fue posible cargar las opciones de la cabecera; recargue la página para modificarla.";
     [Parameter] public string TextoGuardar { get; set; } = "Guardar cabecera";
+    /// <summary>Botones propios (spec alta rápida: "Registrar …", "Guardar para después", "Guardar cambios"); sustituyen a "Guardar cabecera".</summary>
+    [Parameter] public RenderFragment? Botones { get; set; }
     /// <summary>Campos (hidden de Xmin incluido), dentro del EditForm.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }

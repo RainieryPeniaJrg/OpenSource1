@@ -41,7 +41,7 @@ public sealed class DocumentoFacturaBorradorTests
         Assert.Contains("name=\"_handler\" value=\"guardar-cabecera\"", html);
         Assert.Contains("data-testid=\"guardar-cabecera\"", html);
         Assert.Contains("name=\"UpdateInput.SerieRegistroId\"", html);
-        Assert.Contains("Próximo número: <strong>00000013</strong>", html);
+        Assert.Contains("próximo <strong>00000013</strong>", html);
         Assert.Contains("data-testid=\"tabla-lineas\"", html);
         Assert.Contains("data-testid=\"fila-nueva\"", html);
         Assert.Contains("data-testid=\"total-descuentos\">5.00<", html);
@@ -290,7 +290,7 @@ public sealed class DocumentoFacturaBorradorTests
         Assert.Contains("data-testid=\"lineas-documento\"", html);
         Assert.DoesNotContain("data-testid=\"tabla-lineas\"", html);
         Assert.Contains("Serie de registro: <strong>FV</strong>", html);
-        Assert.DoesNotContain("Próximo número", html);
+        Assert.DoesNotContain("Se numerará", html);
         Assert.Contains("value=\"add-linea\"", html);
         Assert.Contains("value=\"update-linea\"", html);
         Assert.Contains("value=\"delete-linea\"", html);
@@ -327,7 +327,7 @@ public sealed class DocumentoFacturaBorradorTests
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), Url(liberado));
 
         Assert.Contains("data-testid=\"documento-cabecera\"", html);
-        Assert.Contains("Próximo número: <strong>00000013</strong>", html);
+        Assert.Contains("próximo <strong>00000013</strong>", html);
         Assert.DoesNotContain("data-testid=\"fila-nueva\"", html);
         Assert.Contains("value=\"reabrir\"", html);
         Assert.Contains($"href=\"{Url(liberado)}?postear=true\"", html);

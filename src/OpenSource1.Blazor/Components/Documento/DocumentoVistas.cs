@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
+using OpenSource1.Application.Features.ConfiguracionNumeracion.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Calculo;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
@@ -132,4 +134,54 @@ public static class ColumnasDocumento
         new("Importe", l => l.EsComentario ? null : VentasOpciones.Importe(l.ImporteLinea), Derecha: true, Clase: "font-semibold text-slate-800"),
         new("IVA", l => l.EsComentario ? null : $"{l.IdentificadorIva} {l.PorcentajeIva.ToString("0.##", Inv)}%", Clase: "text-xs text-slate-500"),
     ];
+}
+
+/// <summary>Un dato derivado en solo lectura (spec alta rápida): <see cref="DatosDerivados"/> lo pinta como <c>&lt;dt&gt;/&lt;dd&gt;</c>.</summary>
+public sealed record DatoDerivado(string Etiqueta, string Valor, string? Href = null);
+
+/// <summary>Valor del botón que envía la cabecera editable (<c>name="UpdateInput.Accion"</c>): qué hacer después de guardarla.</summary>
+public static class AccionCabecera
+{
+    /// <summary>Guardar y abrir la confirmación de "Registrar".</summary>
+    public const string Registrar = "registrar";
+
+    /// <summary>Guardar y volver a la lista "En preparación".</summary>
+    public const string Despues = "despues";
+}
+
+/// <summary>Numeración vista desde la UI del documento (spec alta rápida, Parte 1.5).</summary>
+public static partial class NumeracionDocumento
+{
+    /// <summary>
+    /// Motivo para no capturar ni registrar: falta la fila de configuración de <paramref name="tipoBorrador"/> o de
+    /// <paramref name="tipoRegistro"/>, o su serie está inactiva. <see langword="null"/> = se puede; también si la configuración no
+    /// cargó (<paramref name="configuracion"/> null): no se bloquea por un fallo de lectura, la API valida al guardar (como F7).
+    /// </summary>
+    public static string? MotivoBloqueo(
+        IReadOnlyList<ConfiguracionNumeracionResponse>? configuracion, TipoDocumentoSerie tipoBorrador, TipoDocumentoSerie tipoRegistro, string documentos)
+    {
+        if (configuracion is null)
+        {
+            return null;
+        }
+
+        var falta = new[] { tipoBorrador, tipoRegistro }.Any(t => Configurada(configuracion, t) is null);
+        return falta
+            ? $"No hay una serie configurada para {documentos} (o la serie configurada está inactiva): no se puede preparar ni registrar."
+            : null;
+    }
+
+    /// <summary>Fila de configuración del tipo con su serie activa; <see langword="null"/> si no hay o está inactiva.</summary>
+    public static ConfiguracionNumeracionResponse? Configurada(IReadOnlyList<ConfiguracionNumeracionResponse>? configuracion, TipoDocumentoSerie tipo) =>
+        configuracion?.FirstOrDefault(c => c.TipoDocumento == tipo && c.SerieActiva);
+
+    /// <summary>Número de línea de un mensaje de la API ("Línea 20000: …") para enlazar a su fila <c>#linea-20000</c>; si no, null.</summary>
+    public static int? LineaDelMensaje(string mensaje)
+    {
+        var coincidencia = PrefijoLinea().Match(mensaje);
+        return coincidencia.Success && int.TryParse(coincidencia.Groups[1].Value, out var numero) ? numero : null;
+    }
+
+    [GeneratedRegex(@"\ALínea (\d{1,9}):")]
+    private static partial Regex PrefijoLinea();
 }

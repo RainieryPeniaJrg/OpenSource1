@@ -41,7 +41,7 @@ test('borrador de factura en una sola página: cabecera, líneas, totales y barr
 
     // Una sola página: cabecera editable, serie de registro con próximo número, tabla con fila nueva y totales.
     await expect(page.getByTestId('cabecera-editable')).toBeVisible();
-    await expect(page.getByTestId('serie-registro')).toContainText('Próximo número');
+    await expect(page.getByTestId('serie-registro')).toContainText('Se numerará');
     await expect(page.getByTestId('tabla-lineas')).toBeVisible();
     await expect(page.getByTestId('fila-nueva')).toBeVisible();
     await expect(page.getByTestId('totales')).toBeVisible();
