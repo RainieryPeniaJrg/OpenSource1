@@ -198,8 +198,11 @@ public sealed class AccionesFacturasTests
     {
         using var app = Configurar(new BlazorSsrFactory());
         var nota = Guid.NewGuid();
-        app.Simular<INotaCreditoVentaApiClient>()
-            .Setup(c => c.CreateBorradorAsync(It.Is<NotaCreditoBorradorInput>(i => i.FacturaVentaNumero == "FV0001" && i.CopiarLineas), It.IsAny<CancellationToken>()))
+        var notas = app.Simular<INotaCreditoVentaApiClient>();
+        // Sin nota en preparación de FV0001 (Configurar trae una): se crea la nota.
+        notas.Setup(c => c.ListBorradoresAsync(It.IsAny<NotaCreditoVentaBorradorFiltro?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PagedResult<NotaCreditoVentaBorradorResponse>([], 1, 50, 0));
+        notas.Setup(c => c.CreateBorradorAsync(It.Is<NotaCreditoBorradorInput>(i => i.FacturaVentaNumero == "FV0001" && i.CopiarLineas), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VentaOperationResult<NotaCreditoVentaBorradorResponse>(true, "ok", new NotaCreditoVentaBorradorResponse { Id = nota }));
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/notas-credito-venta/nueva?socioId={IdCliente}");
@@ -211,6 +214,23 @@ public sealed class AccionesFacturasTests
         Assert.DoesNotContain("value=\"PAG-0001\"", html);
         Assert.DoesNotContain("value=\"FV0002\"", html);
         Assert.Equal($"/notas-credito-venta/en-preparacion/{nota}?ok=creado", FormulariosSsr.Destino(respuesta));
+    }
+
+    [Fact]
+    public async Task NotaCreditoNueva_FacturaConNotaEnPreparacion_RedirigeALaExistente_SinCrearOtra()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+        var notas = app.Simular<INotaCreditoVentaApiClient>();
+
+        // Configurar trae la nota IdNota en preparación de FV0001: pestaña obsoleta, POST forzado o doble clic la continúan.
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"/notas-credito-venta/nueva?socioId={IdCliente}", "nueva-nota-socio",
+            new Dictionary<string, string> { ["NotaInput.FacturaVentaNumero"] = "FV0001" });
+
+        Assert.Equal($"/notas-credito-venta/en-preparacion/{IdNota}", FormulariosSsr.Destino(respuesta));
+        notas.Verify(c => c.ListBorradoresAsync(
+            It.Is<NotaCreditoVentaBorradorFiltro?>(f => f!.FacturaVentaNumero == "FV0001" && (f.Estado == null || f.Estado == 1)),
+            It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        notas.Verify(c => c.CreateBorradorAsync(It.IsAny<NotaCreditoBorradorInput>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

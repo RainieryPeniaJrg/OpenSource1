@@ -339,6 +339,27 @@ public sealed class AltaRapidaFacturaTests
         api.Verify(c => c.CreateBorradorAsync(It.Is<BorradorCabeceraInput>(i => i.SerieRegistroId == IdSerieOtra), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task Nueva_SerieAplicadaPorElAdministrador_LaLineaDeNumeracionUsaEsaSerie()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+        app.Simular<ISerieApiClient>().Setup(c => c.ProximoAsync(IdSerieOtra, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VentaOperationResult<ProximoNumeroResponse>(true, "ok", new ProximoNumeroResponse("FV2-000007", null)));
+        var ruta = $"{Nueva}?socioId={IdSocio}&tipo=3&serieRegistroId={IdSerieOtra}";
+
+        var administrador = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), ruta));
+        var ejecutor = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente("Ejecutor"), ruta));
+        var sinElegir = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), $"{Nueva}?socioId={IdSocio}&tipo=3"));
+
+        Assert.Contains("Se numerará con la serie <strong>FV2</strong> · próximo <strong>FV2-000007</strong>", administrador);
+        Assert.DoesNotContain("FV-000123", administrador);
+        // El cambio de serie solo cuenta tras "Aplicar": la ayuda lo dice junto al selector.
+        Assert.Contains("Aplique la serie antes de agregar la línea", administrador);
+        // Sin CanAdministrar la query se ignora: la configurada.
+        Assert.Contains("Se numerará con la serie <strong>FV</strong> · próximo <strong>FV-000123</strong>", ejecutor);
+        Assert.Contains("Se numerará con la serie <strong>FV</strong> · próximo <strong>FV-000123</strong>", sinElegir);
+    }
+
     private static string Resumen(string html)
     {
         var inicio = html.IndexOf("data-testid=\"resumen-errores\"", StringComparison.Ordinal);

@@ -105,15 +105,17 @@ else
                     <input type="hidden" name="addProductoQuery" value="@AddProductoQuery" />
                 }
                 @RetornoOculto
-                <NumeracionRegistro Codigo="@serieRegistro?.SerieCodigo" Proximo="@proximo" PuedeCambiar="true" Id="serieRegistroId" Name="serieRegistroId"
+                <NumeracionRegistro Codigo="@codigoNumeracion" Proximo="@proximo" PuedeCambiar="true" Id="serieRegistroId" Name="serieRegistroId"
                                     Series="@seriesRegistro.Items" Seleccion="@AltaInput!.SerieRegistroId" CargaFallida="@seriesRegistro.CargaFallida">
+                    @* El selector va en un formulario GET aparte: un cambio sin "Aplicar" no viaja con la línea (se dice explícitamente). *@
+                    <p class="mt-1 text-xs text-slate-500" data-testid="ayuda-aplicar-serie">Aplique la serie antes de agregar la línea; un cambio sin aplicar no se usa.</p>
                     <button type="submit" class="btn-press mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Aplicar</button>
                 </NumeracionRegistro>
             </form>
         }
         else
         {
-            <NumeracionRegistro Codigo="@serieRegistro?.SerieCodigo" Proximo="@proximo" />
+            <NumeracionRegistro Codigo="@codigoNumeracion" Proximo="@proximo" />
         }
     </div>
 
@@ -224,6 +226,8 @@ else
     private OpcionesCargadas<SerieResponse> seriesRegistro = OpcionesCargadas<SerieResponse>.SinCargar;
     private ConfiguracionNumeracionResponse? serieRegistro;
     private ProximoVista? proximo;
+    // Línea de numeración: la serie aplicada por el Administrador (?serieRegistroId=) o, si no, la configurada.
+    private string? codigoNumeracion;
     private string? motivoBloqueo;
     private PermisosPagina? permisos;
     private SocioNegocioResponse? socio;
@@ -346,13 +350,24 @@ else
         motivoBloqueo = NumeracionDocumento.MotivoBloqueo(
             configuracion, TipoDocumentoSerie.BorradorFacturaVenta, TipoDocumentoSerie.FacturaVenta, "facturas de venta");
         serieRegistro = NumeracionDocumento.Configurada(configuracion, TipoDocumentoSerie.FacturaVenta);
-        proximo = serieRegistro is null
-            ? new ProximoVista(null, null, "No fue posible comprobar la serie configurada.")
-            : await SeriesOpciones.ProximoAsync(SerieApiClient, serieRegistro.SerieId, Logger);
         if (esAdministrador && motivoBloqueo is null)
         {
             seriesRegistro = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.FacturaVenta, Logger);
         }
+
+        // Serie aplicada por el Administrador (en un POST, la del campo oculto que se va a enviar): su código (de la lista de series)
+        // y su próximo número; sin elegir (o para el resto), la configurada.
+        if (esAdministrador && AltaInput!.SerieRegistroId is { } elegida && elegida != serieRegistro?.SerieId)
+        {
+            codigoNumeracion = seriesRegistro.Items.FirstOrDefault(x => x.Id == elegida)?.Codigo;
+            proximo = await SeriesOpciones.ProximoAsync(SerieApiClient, elegida, Logger);
+            return;
+        }
+
+        codigoNumeracion = serieRegistro?.SerieCodigo;
+        proximo = serieRegistro is null
+            ? new ProximoVista(null, null, "No fue posible comprobar la serie configurada.")
+            : await SeriesOpciones.ProximoAsync(SerieApiClient, serieRegistro.SerieId, Logger);
     }
 
     private async Task CargarSocioAsync()

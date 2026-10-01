@@ -255,8 +255,9 @@ else
                     @foreach (var b in borradoresNota)
                     {
                         <tr @key="b.Id">
-                            <td class="px-4 py-2"><a class="font-mono text-xs font-semibold text-brand-700 underline" href="@($"{RutasPreparacion.Nota}/{b.Id}")">@b.Numero</a></td>
-                            <td class="px-4 py-2 text-xs text-amber-700">En preparación (@b.NumeroLineas línea(s))</td>
+                            @* Spec §1.2: sin el número interno de preparación; "En preparación" y "Continuar". *@
+                            <td class="px-4 py-2"><span class="text-xs font-semibold text-amber-700" data-testid="nota-fila-preparacion">En preparación</span></td>
+                            <td class="px-4 py-2 text-xs text-slate-700"><a class="font-semibold text-brand-700 underline" href="@($"{RutasPreparacion.Nota}/{b.Id}")" data-testid="continuar-nota-fila">Continuar</a> <span class="text-slate-500">(@b.NumeroLineas línea(s))</span></td>
                             <td class="px-4 py-2 text-xs text-slate-500">@EntradaFecha.Formatear(b.FechaRegistro)</td>
                             <td class="px-4 py-2 text-right text-slate-400">—</td>
                             <td class="px-4 py-2 text-xs text-slate-400">—</td>
@@ -566,9 +567,18 @@ else
             // Si la factura no cargó (API caída), se conserva el mensaje de carga.
             if (!detalleCargaFallida)
             {
-                Show("warning", "No se encontró la factura posteada.");
+                Show("warning", "No se encontró la factura registrada.");
             }
 
+            return;
+        }
+
+        // Pestaña obsoleta, POST forzado o doble clic: si la factura ya tiene una nota en preparación (cargada en
+        // OnParametersSetAsync, que en SSR termina antes de despachar el formulario) se continúa esa en vez de crear otra.
+        // R17: fuera de cualquier try/catch.
+        if (NotaEnPreparacion is { } existente)
+        {
+            Nav.NavigateTo($"{RutasPreparacion.Nota}/{existente.Id}");
             return;
         }
 
@@ -645,7 +655,7 @@ else
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not copy factura {Numero} to a borrador.", Numero);
-            Show("danger", "No fue posible copiar la factura a un borrador.");
+            Show("danger", "No fue posible copiar la factura a una factura en preparación.");
         }
 
         // R17: la navegación va fuera del try/catch.

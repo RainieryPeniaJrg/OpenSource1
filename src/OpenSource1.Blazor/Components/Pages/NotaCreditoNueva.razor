@@ -6,6 +6,7 @@
 @using OpenSource1.Application.Features.SociosNegocio.Dtos
 @using OpenSource1.Application.Security
 @using OpenSource1.Blazor.Services
+@using OpenSource1.Core.Common
 @using OpenSource1.Core.Enums
 @inject INotaCreditoVentaApiClient NotaApiClient
 @inject ICobroApiClient CobroApiClient
@@ -185,6 +186,16 @@
             return;
         }
 
+        // Pestaña obsoleta, POST forzado o doble clic: si la factura ya tiene una nota en preparación (Abierta) se continúa esa.
+        // Si la consulta falla se sigue con el alta (la API valida).
+        var existente = await NotaEnPreparacionAsync(f.FacturaVentaNumero.Trim());
+        if (existente is { } id)
+        {
+            // R17: fuera de cualquier try/catch.
+            Nav.NavigateTo($"{RutasPreparacion.Nota}/{id}");
+            return;
+        }
+
         // R17: la navegación va FUERA del try (NavigateTo puede lanzar NavigationException y el catch se la tragaría).
         string? destino = null;
         try
@@ -209,6 +220,22 @@
         if (destino is not null)
         {
             Nav.NavigateTo(destino);
+        }
+    }
+
+    /// <summary>Id de la nota de crédito en preparación (Abierta) de la factura; el filtro de la API es "contiene": se compara exacto.</summary>
+    private async Task<Guid?> NotaEnPreparacionAsync(string numeroFactura)
+    {
+        try
+        {
+            var pagina = await NotaApiClient.ListBorradoresAsync(
+                new NotaCreditoVentaBorradorFiltro(null, numeroFactura, null, null), new PageRequest(1, PageRequest.TamanoMaximo, "CreatedAtUtc", Descendente: false));
+            return pagina.Items.FirstOrDefault(b => string.Equals(b.FacturaVentaNumero, numeroFactura, StringComparison.Ordinal))?.Id;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not check notas de crédito en preparación of factura {Numero}.", numeroFactura);
+            return null;
         }
     }
 

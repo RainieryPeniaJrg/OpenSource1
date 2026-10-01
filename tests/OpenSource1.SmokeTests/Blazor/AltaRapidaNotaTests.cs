@@ -59,9 +59,28 @@ public sealed class AltaRapidaNotaTests
         Assert.Contains($"href=\"{Url(IdNota)}\" data-testid=\"continuar-nota\"", html);
         Assert.Contains(">Continuar nota de crédito</a>", html);
         Assert.DoesNotContain("data-testid=\"crear-nota\"", html);
-        // La fila de la nota en "Notas de crédito" de la factura enlaza a la nota en preparación.
-        Assert.Contains($"href=\"{Url(IdNota)}\">00000003</a>", html);
+        // La fila de la nota en "Notas de crédito" de la factura no muestra el número interno de preparación (spec §1.2): "En
+        // preparación" y el enlace "Continuar" a la nota.
+        var tabla = html[html.IndexOf("data-testid=\"notas-factura\"", StringComparison.Ordinal)..];
+        Assert.DoesNotContain("00000003", html);
+        Assert.Contains("data-testid=\"nota-fila-preparacion\">En preparación</span>", tabla);
+        Assert.Contains($"href=\"{Url(IdNota)}\" data-testid=\"continuar-nota-fila\">Continuar</a>", tabla);
         Assert.Contains("1 en preparación", html);
+    }
+
+    [Fact]
+    public async Task FacturaRegistrada_PostCrearNotaConNotaEnPreparacion_RedirigeALaExistente_SinCrearOtra()
+    {
+        using var app = Configurar(new BlazorSsrFactory(), notasEnPreparacion: [new NotaCreditoVentaBorradorResponse { Id = IdNota, Numero = "00000003", FacturaVentaNumero = Factura }]);
+        var notas = app.Simular<INotaCreditoVentaApiClient>();
+
+        // Pestaña obsoleta, POST forzado o doble clic (también con el diálogo ?crearNota=true): se continúa la nota existente.
+        var forzado = await FormulariosSsr.EnviarAsync(app.Cliente(), $"/facturas-venta/{Factura}", "crear-nota", new Dictionary<string, string>());
+        var dialogo = await FormulariosSsr.EnviarAsync(app.Cliente(), $"/facturas-venta/{Factura}?crearNota=true", "crear-nota", new Dictionary<string, string>());
+
+        Assert.Equal(Url(IdNota), FormulariosSsr.Destino(forzado));
+        Assert.Equal(Url(IdNota), FormulariosSsr.Destino(dialogo));
+        notas.Verify(c => c.CreateBorradorAsync(It.IsAny<NotaCreditoBorradorInput>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -161,6 +180,21 @@ public sealed class AltaRapidaNotaTests
         var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdNota)}?eliminar=true", "delete-borrador-nota", new Dictionary<string, string>());
 
         Assert.Equal("/notas-credito-venta?estado=preparacion&ok=descartada", FormulariosSsr.Destino(respuesta));
+    }
+
+    [Fact]
+    public async Task Descartar_FalloDeLaApi_MuestraElMensajeSinNavegar()
+    {
+        using var app = Configurar(new BlazorSsrFactory(), notasEnPreparacion: []);
+        app.Simular<INotaCreditoVentaApiClient>()
+            .Setup(c => c.DeleteBorradorAsync(IdNota, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VentaOperationResult<bool>(false, "La nota de crédito ya se registró: no se puede descartar."));
+
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdNota)}?eliminar=true", "delete-borrador-nota", new Dictionary<string, string>());
+        var html = HtmlSsr.Decodificar(await respuesta.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+        Assert.Contains("La nota de crédito ya se registró: no se puede descartar.", html);
     }
 
     [Theory]
