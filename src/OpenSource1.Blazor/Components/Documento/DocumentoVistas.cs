@@ -185,3 +185,46 @@ public static partial class NumeracionDocumento
     [GeneratedRegex(@"\ALínea (\d{1,9}):")]
     private static partial Regex PrefijoLinea();
 }
+
+/// <summary>Rutas de los documentos en preparación (spec alta rápida, Parte 2).</summary>
+public static class RutasPreparacion
+{
+    public const string Factura = "/facturas-venta/en-preparacion";
+    public const string Nota = "/notas-credito-venta/en-preparacion";
+    public const string ListaFacturas = "/facturas-venta?estado=preparacion";
+    public const string ListaNotas = "/notas-credito-venta?estado=preparacion";
+
+    /// <summary>Destino de una ruta antigua (<c>…/borradores/{id}</c>): la nueva, con el <c>returnUrl</c> solo si es local (si no, la lista).</summary>
+    public static string Redireccion(string baseRuta, Guid id, string? returnUrl, string listaPorDefecto)
+    {
+        var destino = $"{baseRuta}/{id}";
+        return string.IsNullOrWhiteSpace(returnUrl)
+            ? destino
+            : RetornoLocal.ConRetorno(destino, RetornoLocal.Validar(returnUrl, listaPorDefecto));
+    }
+
+    /// <summary>Documento en preparación con la pestaña de tipo de línea de la fila de alta (sin query para Producto, el tipo por defecto).</summary>
+    public static string ConTipo(string baseRuta, Guid id, TipoLineaFactura tipo) =>
+        tipo == TipoLineaFactura.Producto ? $"{baseRuta}/{id}" : $"{baseRuta}/{id}?tipo={(int)tipo}";
+
+    /// <summary>
+    /// Destino tras guardar la cabecera editable según el botón que la envió (<see cref="AccionCabecera"/>, el
+    /// <c>{Prefijo}.Accion</c> de <see cref="BotonesPreparacion"/>): "Registrar …" abre la confirmación (<paramref name="urlRegistrar"/>),
+    /// "Guardar para después" vuelve a la lista en preparación (<paramref name="listaPreparacion"/>, <c>ok=guardada</c>) y cualquier
+    /// otro valor ("Guardar cambios") se queda en el documento (<paramref name="urlPropia"/>, <c>ok=modificado</c>).
+    /// </summary>
+    public static string DestinoTrasGuardar(string? accion, string urlRegistrar, string urlPropia, string listaPreparacion) => accion switch
+    {
+        AccionCabecera.Registrar => urlRegistrar,
+        AccionCabecera.Despues => RetornoLocal.ConParametro(listaPreparacion, "ok", "guardada"),
+        _ => RetornoLocal.ConParametro(urlPropia, "ok", "modificado"),
+    };
+}
+
+/// <summary>Textos derivados comunes de la cabecera.</summary>
+public static class DatosDocumento
+{
+    /// <summary>"Razón social RNC" o "—".</summary>
+    public static string Fiscal(string? razonSocial, string? numeroDocumento) =>
+        string.IsNullOrWhiteSpace($"{razonSocial} {numeroDocumento}") ? "—" : $"{razonSocial} {numeroDocumento}".Trim();
+}

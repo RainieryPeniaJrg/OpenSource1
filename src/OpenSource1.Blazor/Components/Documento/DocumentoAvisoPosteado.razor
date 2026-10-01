@@ -1,6 +1,6 @@
-@* Aviso de borrador Posteada (solo lectura) con enlace al documento posteado (spec no-series). *@
+@* Aviso de documento en preparación ya registrado (Posteada, solo lectura) con enlace al documento registrado (spec alta rápida). *@
 <div class="mb-6" data-testid="aviso-posteada">
-    <MessageBox Type="info" Message="@($"Borrador posteado como {Documento} {Numero}: es de solo lectura.")" />
+    <MessageBox Type="info" Message="@($"Esta preparación ya se registró como {Documento} {Numero}: es de solo lectura.")" />
     @if (Href is not null)
     {
         <p class="mt-2 px-1 text-sm"><a class="font-semibold text-brand-700 hover:underline" href="@Href" data-testid="ver-posteado">Ver @Documento @Numero</a></p>

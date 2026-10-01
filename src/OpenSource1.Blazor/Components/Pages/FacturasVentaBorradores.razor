@@ -322,30 +322,26 @@
 
     private static string? EmptyAsNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    /// <summary>Cabecera de un borrador: modelo de /facturas-venta/nueva (AddInput) y de la cabecera editable de la página única (UpdateInput).</summary>
+    /// <summary>
+    /// Cabecera editable de la factura en preparación (<c>UpdateInput</c>): fechas, vencimiento, descripción, serie de registro (solo el
+    /// Administrador) y la acción.
+    /// </summary>
     public sealed class BorradorForm : IValidatableObject
     {
-        [Required(ErrorMessage = "Seleccione el cliente vender-a.")]
-        public Guid? SocioNegocioId { get; set; }
-
-        public Guid? SocioNegocioFacturarAId { get; set; }
-
         public string? FechaRegistroTexto { get; set; }
 
         public string? FechaDocumentoTexto { get; set; }
 
         public string? FechaVencimientoTexto { get; set; }
 
-        public Guid? AlmacenId { get; set; }
-
         [MaxLength(200, ErrorMessage = "La descripción admite como máximo 200 caracteres.")]
         public string? Descripcion { get; set; }
 
-        /// <summary>Alta: serie de borradores (null = la configurada). Solo se envía en el alta.</summary>
-        public Guid? SerieBorradorId { get; set; }
-
-        /// <summary>Serie con la que se numerará la factura (null en el alta = la configurada; en la cabecera, la del borrador).</summary>
+        /// <summary>Serie con la que se numerará la factura (solo el Administrador, en "Más opciones"); la página no la envía para el resto.</summary>
         public Guid? SerieRegistroId { get; set; }
+
+        /// <summary>Botón que envió la cabecera: <see cref="AccionCabecera.Registrar"/>, <see cref="AccionCabecera.Despues"/> o vacío (guardar y seguir).</summary>
+        public string? Accion { get; set; }
 
         public long Xmin { get; set; }
 

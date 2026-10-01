@@ -162,7 +162,7 @@ public sealed class ComponentesDocumentoTests
         var html = await Renderizar<DocumentoAvisoPosteado>(new() { ["Documento"] = "la factura", ["Numero"] = "00000012", ["Href"] = "/facturas-venta/00000012" });
 
         Assert.Contains("data-testid=\"aviso-posteada\"", html);
-        Assert.Contains("Borrador posteado como la factura 00000012: es de solo lectura.", html);
+        Assert.Contains("Esta preparación ya se registró como la factura 00000012: es de solo lectura.", html);
         Assert.Contains("href=\"/facturas-venta/00000012\" data-testid=\"ver-posteado\">Ver la factura 00000012</a>", html);
     }
 
@@ -452,9 +452,77 @@ public sealed class ComponentesDocumentoTests
     }
 
     [Fact]
-    public void Estados_IncluyenPosteada()
+    public async Task InfoDeSerie_SinCodigoConError_MuestraElError()
     {
-        Assert.Equal("Posteada", VentasOpciones.Estado(EstadoFacturaBorrador.Posteada));
+        var html = await Renderizar<SerieNumeracionInfo>(new() { ["Codigo"] = null, ["Error"] = "No fue posible comprobar la serie configurada." });
+
+        Assert.Contains("Serie de registro: <span>—</span>", html);
+        Assert.Contains("No fue posible comprobar la serie configurada.", html);
+    }
+
+    [Fact]
+    public async Task BotonesPreparacion_Registrable_RegistrarGuardarParaDespuesYGuardarCambios()
+    {
+        var html = await Renderizar<BotonesPreparacion>(new()
+        {
+            ["TextoRegistrar"] = "Registrar factura", ["Proximo"] = new ProximoVista("FV-000123", null, null),
+            ["LimpiarHref"] = "/facturas-venta/en-preparacion/1", ["CancelarHref"] = "/facturas-venta?estado=preparacion",
+        });
+
+        Assert.Contains("<button type=\"submit\" name=\"UpdateInput.Accion\" value=\"registrar\" data-testid=\"registrar\"", html);
+        Assert.Contains(">Registrar factura</button>", html);
+        Assert.Contains("name=\"UpdateInput.Accion\" value=\"despues\" data-testid=\"guardar-despues\"", html);
+        Assert.Contains(">Guardar para después</button>", html);
+        Assert.Contains(">Guardar cambios</button>", html);
+        Assert.Contains("<a href=\"/facturas-venta?estado=preparacion\" data-testid=\"cancelar-cabecera\"", html);
+        Assert.DoesNotContain("motivo-registrar", html);
+        Assert.DoesNotContain("Liberar", html);
+    }
+
+    [Fact]
+    public async Task BotonesPreparacion_SerieQueNoNumera_RegistrarDeshabilitadoConMotivo_YOtroPrefijo()
+    {
+        var html = await Renderizar<BotonesPreparacion>(new()
+        {
+            ["TextoRegistrar"] = "Registrar nota de crédito", ["Prefijo"] = "UpdateNota", ["Proximo"] = new ProximoVista(null, null, "La serie 'NC' está inactiva."),
+            ["LimpiarHref"] = "/x", ["CancelarHref"] = "/y",
+        });
+
+        Assert.Contains("<button type=\"button\" disabled data-testid=\"registrar\"", html);
+        Assert.Contains("No se puede registrar: La serie 'NC' está inactiva.", html);
+        Assert.Contains("name=\"UpdateNota.Accion\" value=\"despues\"", html);
+        Assert.Equal("No se puede registrar: X", BotonesPreparacion.MotivoNoRegistrable(new ProximoVista(null, null, "X")));
+        Assert.Null(BotonesPreparacion.MotivoNoRegistrable(null));
+    }
+
+    [Theory]
+    [InlineData("registrar", "/f/1?registrar=true")]
+    [InlineData("despues", "/facturas-venta?estado=preparacion&ok=guardada")]
+    [InlineData(null, "/f/1?ok=modificado")]
+    [InlineData("otra", "/f/1?ok=modificado")]
+    public void RutasPreparacion_DestinoTrasGuardar_SegunLaAccion(string? accion, string destino) =>
+        Assert.Equal(destino, RutasPreparacion.DestinoTrasGuardar(accion, "/f/1?registrar=true", "/f/1", RutasPreparacion.ListaFacturas));
+
+    [Fact]
+    public void RutasPreparacion_RedireccionYConTipo_YDatosFiscales()
+    {
+        var id = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006a2");
+
+        Assert.Equal($"/facturas-venta/en-preparacion/{id}", RutasPreparacion.Redireccion(RutasPreparacion.Factura, id, null, RutasPreparacion.ListaFacturas));
+        Assert.Equal($"/facturas-venta/en-preparacion/{id}?returnUrl=%2Ffacturas-venta%3Festado%3Dpreparacion",
+            RutasPreparacion.Redireccion(RutasPreparacion.Factura, id, "https://evil.example/x", RutasPreparacion.ListaFacturas));
+        Assert.Equal($"/notas-credito-venta/en-preparacion/{id}", RutasPreparacion.ConTipo(RutasPreparacion.Nota, id, TipoLineaFactura.Producto));
+        Assert.Equal($"/facturas-venta/en-preparacion/{id}?tipo=3", RutasPreparacion.ConTipo(RutasPreparacion.Factura, id, TipoLineaFactura.Comentario));
+        Assert.Equal("Comercial Uno SRL 101000001", DatosDocumento.Fiscal("Comercial Uno SRL", "101000001"));
+        Assert.Equal("—", DatosDocumento.Fiscal(null, " "));
+    }
+
+    [Fact]
+    public void Estados_EnPreparacionYRegistrada()
+    {
+        Assert.Equal("En preparación", VentasOpciones.Estado(EstadoFacturaBorrador.Abierta));
+        Assert.Equal("En preparación (liberada)", VentasOpciones.Estado(EstadoFacturaBorrador.Liberada));
+        Assert.Equal("Registrada", VentasOpciones.Estado(EstadoFacturaBorrador.Posteada));
         Assert.Equal("Abierta", VentasOpciones.EstadoNota(EstadoNotaCreditoBorrador.Abierta));
         Assert.Equal("Posteada", VentasOpciones.EstadoNota(EstadoNotaCreditoBorrador.Posteada));
     }

@@ -35,7 +35,8 @@ public sealed class DocumentosPosteadosTests
         Assert.Contains("data-testid=\"lineas-documento\"", html);
         Assert.Contains("La factura no tiene líneas.", html);
         Assert.Contains("data-testid=\"totales\"", html);
-        Assert.Contains($"href=\"/facturas-venta/borradores/{IdBorrador}\"", html);
+        Assert.Contains($"href=\"/facturas-venta/en-preparacion/{IdBorrador}\"", html);
+        Assert.Contains("Ver preparación", html);
         Assert.Contains("href=\"/facturas-venta/FV-000009?copiar=true", html);
         Assert.Contains("data-testid=\"aviso-numeracion\"", html);
         Assert.Contains("quedan 3 número(s)", html);
@@ -50,8 +51,14 @@ public sealed class DocumentosPosteadosTests
         using var app = Configurar(new BlazorSsrFactory());
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/FV-000009?aviso={AvisoFv}");
+        var registrada = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/FV-000009?ok=registrada&aviso={AvisoFv}"));
 
         Assert.DoesNotContain("data-testid=\"aviso-numeracion\"", html);
+        Assert.DoesNotContain("data-testid=\"nueva-factura\"", html);
+        Assert.Contains("data-testid=\"aviso-numeracion\"", registrada);
+        Assert.Contains("Factura FV-000009 registrada.", registrada);
+        Assert.Contains("<a href=\"/facturas-venta/nueva\" data-testid=\"nueva-factura\"", registrada);
+        Assert.Contains(">Nueva factura</a>", registrada);
     }
 
     [Fact]
@@ -61,7 +68,9 @@ public sealed class DocumentosPosteadosTests
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/FV-000009");
 
-        Assert.Contains("00000077", html);
+        Assert.Contains("Preparación", html);
+        Assert.DoesNotContain("Ver preparación", html);
+        Assert.DoesNotContain("href=\"/facturas-venta/en-preparacion/", html);
         Assert.DoesNotContain("href=\"/facturas-venta/borradores/", html.Replace("href=\"/facturas-venta/borradores\"", string.Empty, StringComparison.Ordinal));
     }
 
@@ -72,7 +81,7 @@ public sealed class DocumentosPosteadosTests
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/FV-000009?copiar=true");
 
-        Assert.Contains("Copiar a borrador", html);
+        Assert.Contains("Copiar a factura en preparación", html);
         Assert.Contains("Sí, copiar", html);
         Assert.Contains("value=\"copiar-borrador\"", html);
         Assert.Contains("href=\"/facturas-venta/FV-000009\"", html);
@@ -88,7 +97,7 @@ public sealed class DocumentosPosteadosTests
 
         var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), "/facturas-venta/FV-000009?copiar=true", "copiar-borrador", new Dictionary<string, string>());
 
-        Assert.Equal($"/facturas-venta/borradores/{IdNuevo}?ok=copiado", FormulariosSsr.Destino(respuesta));
+        Assert.Equal($"/facturas-venta/en-preparacion/{IdNuevo}?ok=copiado", FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
@@ -105,7 +114,7 @@ public sealed class DocumentosPosteadosTests
 
         Assert.Equal(System.Net.HttpStatusCode.OK, respuesta.StatusCode);
         Assert.Contains("Línea 20000", html);
-        Assert.Contains($"href=\"/facturas-venta/borradores/{IdNuevo}\"", html);
+        Assert.Contains($"href=\"/facturas-venta/en-preparacion/{IdNuevo}\"", html);
         Assert.Contains("data-testid=\"borrador-copiado\"", html);
         // Hecha la copia, el diálogo ya no se vuelve a ofrecer (el formulario sigue en el árbol).
         Assert.DoesNotContain("Sí, copiar", html);
@@ -344,7 +353,7 @@ public sealed class DocumentosPosteadosTests
             Assert.DoesNotContain("Registro contable LLAME", html);
         }
 
-        Assert.Contains("Factura FV-000009 posteada", factura);
+        Assert.Contains("Factura FV-000009 registrada.", factura);
         Assert.Contains("Nota de crédito NC-000003 posteada", nota);
     }
 

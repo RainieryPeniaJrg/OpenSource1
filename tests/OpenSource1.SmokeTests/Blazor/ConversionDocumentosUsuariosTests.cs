@@ -4,10 +4,12 @@ using System.Net;
 using BlazorApp::OpenSource1.Blazor.Services;
 using Moq;
 using OpenSource1.Application.Features.Almacenes.Dtos;
+using OpenSource1.Application.Features.ConfiguracionNumeracion.Dtos;
 using OpenSource1.Application.Features.DiariosInventario.Lotes;
 using OpenSource1.Application.Features.DiariosInventario.Lotes.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Dtos;
+using OpenSource1.Application.Features.Productos.Dtos;
 using OpenSource1.Application.Features.SociosNegocio.Dtos;
 using OpenSource1.Application.Features.Users.Dtos;
 using OpenSource1.Core.Common;
@@ -28,7 +30,7 @@ public sealed class ConversionDocumentosUsuariosTests
 
     [Theory]
     [InlineData("/diarios-inventario/nuevo", "save-lote-diario")]
-    [InlineData("/facturas-venta/nueva", "add-borrador")]
+    // /facturas-venta/nueva ya no es una EntityFormPage (alta rápida): la cubre AltaRapidaFacturaTests.Nueva_SinCliente_BuscadorConUsar_SinFormularioDeLinea.
     [InlineData("/admin/users/nuevo", "create-user")]
     public async Task Nuevo_RenderizaFormularioEnTarjeta(string ruta, string formName)
     {
@@ -204,54 +206,44 @@ public sealed class ConversionDocumentosUsuariosTests
         using var app = Configurar(new BlazorSsrFactory());
         var nuevo = Guid.NewGuid();
         app.Simular<IFacturaVentaApiClient>()
-            .Setup(c => c.CreateBorradorAsync(It.Is<BorradorCabeceraInput>(i => i.SocioNegocioId == IdSocio), It.IsAny<CancellationToken>()))
+            .Setup(c => c.CreateBorradorAsync(It.Is<BorradorCabeceraInput>(i => i.SocioNegocioId == IdSocio && i.PrimeraLinea != null), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VentaOperationResult<FacturaVentaBorradorResponse>(true, "ok", new FacturaVentaBorradorResponse { Id = nuevo }));
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/nueva");
-        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), "/facturas-venta/nueva", "add-borrador",
-            new Dictionary<string, string> { ["AddInput.SocioNegocioId"] = IdSocio.ToString() });
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdSocio}&tipo=3", "alta-factura",
+            new Dictionary<string, string>
+            {
+                ["AltaInput.SocioNegocioId"] = IdSocio.ToString(), ["AltaInput.Tipo"] = "3", ["AltaInput.Descripcion"] = "Servicio",
+            });
 
         Assert.Contains("C-001 — Comercial Uno", html);
         Assert.Contains("data-testid=\"buscar-socio\"", html);
-        Assert.Equal($"/facturas-venta/borradores/{nuevo}?ok=creado", FormulariosSsr.Destino(respuesta));
+        Assert.Equal($"/facturas-venta/en-preparacion/{nuevo}?tipo=3&ok=linea_creada", FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
-    public async Task CabeceraFactura_ComponenteCompartido_EnAltaYEdicion()
+    public async Task LineaFactura_ComponenteCompartido_EnAltaYEnPreparacion()
     {
         using var app = Configurar(new BlazorSsrFactory());
-        var otroSocio = Guid.NewGuid();
-        var borradorOtro = Guid.NewGuid();
-        app.Simular<IFacturaVentaApiClient>()
-            .Setup(c => c.GetBorradorAsync(borradorOtro, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FacturaVentaBorradorResponse
-            {
-                Id = borradorOtro, Numero = "B-9", Estado = EstadoFacturaBorrador.Abierta, SocioNegocioId = otroSocio,
-                SocioNegocioCodigo = "C-009", SocioNegocioNombre = "Otro Cliente", FechaRegistro = new DateOnly(2026, 9, 1),
-                FechaDocumento = new DateOnly(2026, 9, 1), Xmin = 3,
-            });
+        var producto = Guid.NewGuid();
+        app.Simular<IProductoApiClient>()
+            .Setup(c => c.GetByIdAsync(producto, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ProductoResponse { Id = producto, Codigo = "P-1", Nombre = "Producto uno", PrecioVenta = 10m });
 
-        var alta = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/nueva");
-        // Spec no-series (Parte 4, F4): la edición de la cabecera vive en la página única del borrador.
-        var edicion = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/borradores/{borradorOtro}");
+        var alta = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdSocio}&tipo=3"));
+        var preparacion = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/en-preparacion/{IdBorrador}?tipo=3"));
+        var altaProducto = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdSocio}&tipo=1&addProductoId={producto}"));
+        var preparacionProducto = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/en-preparacion/{IdBorrador}?tipo=1&addProductoId={producto}"));
 
-        Assert.Contains("data-testid=\"cabecera-factura-fields\"", alta);
-        Assert.Contains("name=\"AddInput.SocioNegocioId\"", alta);
-        Assert.Contains("for=\"AddInput_FechaRegistroTexto\">Fecha de registro</label>", alta);
-        Assert.Contains("— Predeterminado —", alta);
-        Assert.Contains("registro = hoy", alta);
-
-        Assert.Contains("data-testid=\"cabecera-factura-fields\"", edicion);
-        Assert.Contains("name=\"UpdateInput.SocioNegocioId\"", edicion);
-        Assert.Contains("for=\"UpdateInput_FechaRegistroTexto\">Fecha de registro *</label>", edicion);
-        Assert.DoesNotContain("— Predeterminado —", edicion);
-        Assert.Contains($"<option value=\"{otroSocio}\" selected=\"selected\">C-009 — Otro Cliente</option>", edicion);
-        Assert.Contains("la API lo recalcula", edicion);
-        Assert.Contains("data-testid=\"cabecera-editable\"", edicion);
-        Assert.Contains("name=\"UpdateInput.SerieRegistroId\"", edicion);
-        Assert.DoesNotContain("name=\"UpdateInput.SerieBorradorId\"", edicion);
-        Assert.Contains("name=\"AddInput.SerieBorradorId\"", alta);
-        Assert.Contains("name=\"AddInput.SerieRegistroId\"", alta);
+        Assert.Contains("name=\"AltaInput.Descripcion\"", alta);
+        Assert.Contains("for=\"AltaInput_Descripcion\">Descripción de la línea *</label>", alta);
+        Assert.Contains("name=\"AddInput.Descripcion\"", preparacion);
+        Assert.Contains("for=\"AddInput_Descripcion\">Descripción de la línea *</label>", preparacion);
+        const string ayuda = "data-testid=\"ayuda-precio\">Mayor que cero; para regalar, use 100 % de descuento.</p>";
+        Assert.Contains(ayuda, altaProducto);
+        Assert.Contains("name=\"AltaInput.PrecioUnitarioTexto\" value=\"10.00\"", altaProducto);
+        Assert.Contains(ayuda, preparacionProducto);
+        Assert.Contains("name=\"AddInput.PrecioUnitarioTexto\" value=\"10.00\"", preparacionProducto);
     }
 
     [Fact]
@@ -324,6 +316,17 @@ public sealed class ConversionDocumentosUsuariosTests
             .Setup(c => c.ListAsync(It.IsAny<AlmacenSearchFilter?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PagedResult<AlmacenResponse>([new AlmacenResponse { Id = IdAlmacen, Codigo = "PRINC", Nombre = "Principal" }], 1, 50, 1));
         app.Simular<IUserAdminApiClient>();
+        app.Simular<ISocioNegocioApiClient>()
+            .Setup(c => c.GetByIdAsync(IdSocio, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SocioNegocioResponse { Id = IdSocio, Codigo = "C-001", NombreComercial = "Comercial Uno" });
+        // Alta rápida: numeración configurada y activa (sin ella, /facturas-venta/nueva muestra el aviso bloqueante).
+        app.Simular<IConfiguracionNumeracionApiClient>()
+            .Setup(c => c.ListAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ConfiguracionNumeracionResponse { TipoDocumento = TipoDocumentoSerie.BorradorFacturaVenta, SerieCodigo = "FV-BORR", SerieActiva = true },
+                new ConfiguracionNumeracionResponse { TipoDocumento = TipoDocumentoSerie.FacturaVenta, SerieId = Guid.NewGuid(), SerieCodigo = "FV", SerieActiva = true },
+            ]);
         // F7: series simuladas (sin series activas) para el alta y la cabecera del borrador.
         app.Simular<ISerieApiClient>()
             .Setup(c => c.ActivasDelTipoAsync(It.IsAny<TipoDocumentoSerie>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);

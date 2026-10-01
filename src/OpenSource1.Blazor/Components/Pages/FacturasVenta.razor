@@ -53,7 +53,11 @@ else
     <div class="mb-6">
         @if (messageType == "success")
         {
-            <ActionFeedback Type="success" Title="Factura posteada" Message="@message" />
+            <ActionFeedback Type="success" Title="Factura registrada" Message="@message" />
+            @if (Numero is not null && Ok is "posteada" or "registrada")
+            {
+                <a href="/facturas-venta/nueva" data-testid="nueva-factura" class="btn-press mt-2 inline-block rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100">Nueva factura</a>
+            }
         }
         else
         {
@@ -62,7 +66,7 @@ else
     </div>
 }
 
-@if (detalle is not null && Ok == "posteada" && CalculoNumeroSerie.EsTextoAviso(AvisoNumeracion))
+@if (detalle is not null && Ok is "posteada" or "registrada" && CalculoNumeroSerie.EsTextoAviso(AvisoNumeracion))
 {
     <div class="mb-6" data-testid="aviso-numeracion"><MessageBox Type="warning" Message="@AvisoNumeracion" /></div>
 }
@@ -70,8 +74,8 @@ else
 @if (copia is not null)
 {
     <div class="mb-6">
-        <MessageBox Type="warning" Message="@($"Se creó el borrador {copia.Numero}, pero algunas líneas no se copiaron:")" Errors="@copia.Avisos" />
-        <a data-testid="borrador-copiado" href="@($"/facturas-venta/borradores/{copia.BorradorId}")" class="mt-2 inline-block text-sm font-semibold text-brand-600 hover:underline">Abrir el borrador @copia.Numero</a>
+        <MessageBox Type="warning" Message="Se creó la factura en preparación, pero algunas líneas no se copiaron:" Errors="@copia.Avisos" />
+        <a data-testid="borrador-copiado" href="@($"{RutasPreparacion.Factura}/{copia.BorradorId}")" class="mt-2 inline-block text-sm font-semibold text-brand-600 hover:underline">Abrir la factura en preparación</a>
     </div>
 }
 
@@ -305,7 +309,7 @@ else
 
     @if (MuestraDialogoCopiar)
     {
-        <ConfirmDialog Title="Copiar a borrador" Message="@($"Se creará un borrador nuevo con la cabecera y las líneas de la factura {c.Numero}, la fecha de hoy y los datos actuales del cliente.")" Variant="success" CancelHref="@UrlFactura">
+        <ConfirmDialog Title="Copiar a factura en preparación" Message="@($"Se creará una factura en preparación con la cabecera y las líneas de la factura {c.Numero}, la fecha de hoy y los datos actuales del cliente.")" Variant="success" CancelHref="@UrlFactura">
             <EditForm Model="CopiarInput" FormName="copiar-borrador" OnValidSubmit="CopiarAsync" class="mt-4">
                 <button type="submit" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Sí, copiar</button>
                 <a href="@UrlFactura" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
@@ -397,11 +401,11 @@ else
     /// </summary>
     private IReadOnlyList<AccionPagina> CrearDetalle =>
     [
-        new("Copiar a borrador", IconosModulo.Documento, id => $"/facturas-venta/{Uri.EscapeDataString(id!)}?copiar=true", ApplicationPolicies.CanAdd, RequiereSeleccion: true),
+        new("Copiar a factura en preparación", IconosModulo.Documento, id => $"/facturas-venta/{Uri.EscapeDataString(id!)}?copiar=true", ApplicationPolicies.CanAdd, RequiereSeleccion: true),
         .. TienePendiente ? CrearFactura : [],
     ];
 
-    /// <summary>Cabecera en solo lectura (NS20); "Borrador de origen" enlaza al borrador Posteada si la factura lo conserva.</summary>
+    /// <summary>Cabecera en solo lectura (NS20); "Preparación" enlaza a la factura en preparación de origen si la factura la conserva.</summary>
     private static IReadOnlyList<CampoDocumento> CamposFactura(FacturaVentaResponse c) =>
     [
         new("Vender a", $"{c.SocioNegocioCodigo} — {c.SocioNegocioNombre}", $"/clientes/{c.SocioNegocioId}"),
@@ -411,7 +415,7 @@ else
             $"Vence {EntradaFecha.Formatear(c.FechaVencimiento)}{(c.TerminoPagoCodigo is null ? "" : $" ({c.TerminoPagoCodigo})")}"),
         new("Almacén / Moneda", $"{c.AlmacenCodigo} · {c.Moneda}", null,
             c.NumeroRegistroContable is null ? "Sin asiento (total 0)" : $"Asiento {c.NumeroRegistroContable}"),
-        new("Borrador de origen", c.NumeroBorrador, c.FacturaVentaBorradorId is { } b ? $"/facturas-venta/borradores/{b}" : null),
+        new("Preparación", c.FacturaVentaBorradorId is null ? "—" : "Ver preparación", c.FacturaVentaBorradorId is { } b ? $"{RutasPreparacion.Factura}/{b}" : null),
         new("Descripción", string.IsNullOrWhiteSpace(c.Descripcion) ? "—" : c.Descripcion, Ancho: true),
     ];
 
@@ -519,10 +523,11 @@ else
             seriesRegistroNota = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.NotaCreditoVenta, Logger);
         }
 
-        if (Ok == "posteada" && detalle is not null)
+        if (Ok is "posteada" or "registrada" && detalle is not null)
         {
+            // "posteada": enlaces de la versión anterior. El texto del spec ("Factura FV-000123 registrada.") y, detrás, el importe y el asiento.
             var registro = detalle.Cabecera.NumeroRegistroContable;
-            Show("success", $"Factura {detalle.Cabecera.Numero} posteada por {VentasOpciones.Importe(detalle.Cabecera.ImporteTotal)}. " +
+            Show("success", $"Factura {detalle.Cabecera.Numero} registrada. Total {VentasOpciones.Importe(detalle.Cabecera.ImporteTotal)}. " +
                 (registro is null ? "Total 0 (100 % de descuento): sin movimiento de cliente ni registro contable." : $"Registro contable {registro}."));
         }
     }
@@ -633,7 +638,7 @@ else
             {
                 if (valor.Avisos.Count == 0)
                 {
-                    destino = $"/facturas-venta/borradores/{valor.BorradorId}?ok=copiado";
+                    destino = $"{RutasPreparacion.Factura}/{valor.BorradorId}?ok=copiado";
                 }
                 else
                 {

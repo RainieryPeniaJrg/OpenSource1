@@ -3,6 +3,7 @@ extern alias BlazorApp;
 using BlazorApp::OpenSource1.Blazor.Services;
 using Moq;
 using OpenSource1.Application.Features.Almacenes.Dtos;
+using OpenSource1.Application.Features.ConfiguracionNumeracion.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
@@ -121,21 +122,21 @@ public sealed class AccionesFacturasTests
     }
 
     [Fact]
-    public async Task NuevaFactura_ConSocio_PrecargaYBloqueaElCliente()
+    public async Task NuevaFactura_ConSocio_MuestraElClienteEnSoloLectura()
     {
         using var app = Configurar(new BlazorSsrFactory());
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdCliente}");
 
-        Assert.Contains("data-testid=\"cliente-precargado\"", html);
-        Assert.Contains($"<input type=\"hidden\" name=\"AddInput.SocioNegocioId\" value=\"{IdCliente}\"", html);
+        Assert.Contains("data-testid=\"cliente-elegido\"", html);
+        Assert.Contains("data-testid=\"datos-derivados\"", html);
         Assert.Contains("CONTADO — Contado", html);
         Assert.Contains("GENERAL", html);
         Assert.Contains("href=\"/facturas-venta/nueva\"", html);
-        // Cliente bloqueado: ni selector "Vender a" ni buscador de clientes.
-        Assert.DoesNotContain("<select id=\"AddInput_SocioNegocioId\"", html);
+        Assert.Contains(">Cambiar cliente</a>", html);
+        // Cliente elegido: ni selector "Vender a" ni buscador de clientes.
+        Assert.DoesNotMatch("<select[^>]*name=\"AltaInput.SocioNegocioId\"", html);
         Assert.DoesNotContain("data-testid=\"buscar-socio\"", html);
-        Assert.Contains("name=\"AddInput.SocioNegocioFacturarAId\"", html);
     }
 
     [Fact]
@@ -145,9 +146,9 @@ public sealed class AccionesFacturasTests
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={Guid.NewGuid()}");
 
-        Assert.Contains("No se encontró el cliente indicado", html);
-        Assert.DoesNotContain("data-testid=\"cliente-precargado\"", html);
-        Assert.Contains("name=\"AddInput.SocioNegocioId\"", html);
+        var resumen = html[html.IndexOf("data-testid=\"resumen-errores\"", StringComparison.Ordinal)..];
+        Assert.Contains("No se encontró el cliente indicado", resumen);
+        Assert.DoesNotContain("data-testid=\"cliente-elegido\"", html);
         Assert.Contains("data-testid=\"buscar-socio\"", html);
     }
 
@@ -162,7 +163,7 @@ public sealed class AccionesFacturasTests
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), ruta);
 
         Assert.Contains(marcaDeLaPagina, html);
-        Assert.DoesNotContain("data-testid=\"cliente-precargado\"", html);
+        Assert.DoesNotContain("data-testid=\"cliente-elegido\"", html);
         Assert.DoesNotContain("No se encontró el cliente indicado", html);
         // Los enlaces construidos por la página usan el valor ya interpretado (Limpiar recarga Nav.Uri tal cual, absoluta).
         Assert.DoesNotMatch("href=\"/[^\"]*socioId=abc", html);
@@ -177,10 +178,14 @@ public sealed class AccionesFacturasTests
             .Setup(c => c.CreateBorradorAsync(It.Is<BorradorCabeceraInput>(i => i.SocioNegocioId == IdCliente), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VentaOperationResult<FacturaVentaBorradorResponse>(true, "ok", new FacturaVentaBorradorResponse { Id = borrador }));
 
-        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdCliente}", "add-borrador",
-            new Dictionary<string, string> { ["AddInput.SocioNegocioId"] = IdCliente.ToString(), ["AddInput.FechaRegistroTexto"] = "2026-09-28" });
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdCliente}&tipo=3", "alta-factura",
+            new Dictionary<string, string>
+            {
+                ["AltaInput.SocioNegocioId"] = IdCliente.ToString(), ["AltaInput.Tipo"] = "3", ["AltaInput.Descripcion"] = "Servicio",
+                ["AltaInput.FechaRegistroTexto"] = "2026-09-28",
+            });
 
-        Assert.Equal($"/facturas-venta/borradores/{borrador}?ok=creado", FormulariosSsr.Destino(respuesta));
+        Assert.Equal($"/facturas-venta/en-preparacion/{borrador}?tipo=3&ok=linea_creada", FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
@@ -212,8 +217,12 @@ public sealed class AccionesFacturasTests
             .ReturnsAsync(new VentaOperationResult<FacturaVentaBorradorResponse>(true, "ok", new FacturaVentaBorradorResponse { Id = Guid.NewGuid() }));
         var otro = Guid.NewGuid();
 
-        await FormulariosSsr.EnviarAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdCliente}", "add-borrador",
-            new Dictionary<string, string> { ["AddInput.SocioNegocioId"] = otro.ToString(), ["AddInput.FechaRegistroTexto"] = "2026-09-28" });
+        await FormulariosSsr.EnviarAsync(app.Cliente(), $"/facturas-venta/nueva?socioId={IdCliente}&tipo=3", "alta-factura",
+            new Dictionary<string, string>
+            {
+                ["AltaInput.SocioNegocioId"] = otro.ToString(), ["AltaInput.Tipo"] = "3", ["AltaInput.Descripcion"] = "Servicio",
+                ["AltaInput.FechaRegistroTexto"] = "2026-09-28",
+            });
 
         api.Verify(c => c.CreateBorradorAsync(It.Is<BorradorCabeceraInput>(i => i.SocioNegocioId == IdCliente), It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(c => c.CreateBorradorAsync(It.Is<BorradorCabeceraInput>(i => i.SocioNegocioId == otro), It.IsAny<CancellationToken>()), Times.Never);
@@ -333,7 +342,7 @@ public sealed class AccionesFacturasTests
     {
         using var app = Configurar(new BlazorSsrFactory());
 
-        var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/borradores/{IdBorradorAbierto}");
+        var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/en-preparacion/{IdBorradorAbierto}");
 
         Assert.Contains("data-testid=\"cabecera-editable\"", html);
         Assert.DoesNotContain("/editar", html);
@@ -399,6 +408,14 @@ public sealed class AccionesFacturasTests
         // F7: series simuladas (sin series activas): el alta y la cabecera del borrador las cargan.
         app.Simular<ISerieApiClient>()
             .Setup(c => c.ActivasDelTipoAsync(It.IsAny<TipoDocumentoSerie>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        // Alta rápida: numeración configurada y activa (sin ella, /facturas-venta/nueva muestra el aviso bloqueante).
+        app.Simular<IConfiguracionNumeracionApiClient>()
+            .Setup(c => c.ListAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ConfiguracionNumeracionResponse { TipoDocumento = TipoDocumentoSerie.BorradorFacturaVenta, SerieCodigo = "FV-BORR", SerieActiva = true },
+                new ConfiguracionNumeracionResponse { TipoDocumento = TipoDocumentoSerie.FacturaVenta, SerieId = Guid.NewGuid(), SerieCodigo = "FV", SerieActiva = true },
+            ]);
         return app;
     }
 }

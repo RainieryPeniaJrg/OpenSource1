@@ -108,9 +108,9 @@ public static class VentasOpciones
 
     public static string Estado(EstadoFacturaBorrador estado) => estado switch
     {
-        EstadoFacturaBorrador.Abierta => "Abierta",
-        EstadoFacturaBorrador.Liberada => "Liberada",
-        EstadoFacturaBorrador.Posteada => "Posteada",
+        EstadoFacturaBorrador.Abierta => "En preparación",
+        EstadoFacturaBorrador.Liberada => "En preparación (liberada)",
+        EstadoFacturaBorrador.Posteada => "Registrada",
         _ => estado.ToString()
     };
 
