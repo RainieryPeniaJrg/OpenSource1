@@ -56,6 +56,20 @@ public sealed class FacturaVentaApiClientTests
     }
 
     [Fact]
+    public async Task ContarEnPreparacion_PideUnaPaginaDeUno_SinEstado_YDevuelveElTotal()
+    {
+        var handler = new Grabador(HttpStatusCode.OK, """{"items":[],"pagina":1,"tamanoPagina":1,"total":7}""");
+        var client = new FacturaVentaApiClient(Http(handler), NullLogger<FacturaVentaApiClient>.Instance);
+
+        var total = await client.ContarEnPreparacionAsync();
+
+        Assert.Equal(7L, total);
+        Assert.EndsWith("api/facturas-venta/borradores", handler.Uri!.AbsolutePath);
+        Assert.Contains("tamanoPagina=1", handler.Uri.Query);
+        Assert.DoesNotContain("estado=", handler.Uri.Query);
+    }
+
+    [Fact]
     public async Task CreateLinea_EnviaElTipoComoEntero_ALaRutaDelBorrador()
     {
         var handler = new Grabador(HttpStatusCode.Created, "{}");

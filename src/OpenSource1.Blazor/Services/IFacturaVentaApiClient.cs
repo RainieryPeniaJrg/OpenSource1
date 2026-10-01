@@ -19,6 +19,12 @@ public interface IFacturaVentaApiClient
     Task<PagedResult<FacturaVentaBorradorResponse>> ListBorradoresAsync(
         FacturaVentaBorradorFiltro? filtro = null, PageRequest? paginacion = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Facturas en preparación (borradores Abierta y Liberada) para la pestaña "En preparación (n)": el <c>Total</c> de una página de
+    /// tamaño 1 del listado existente. Un error de la API lanza <see cref="HttpRequestException"/> (la página muestra la pestaña sin número).
+    /// </summary>
+    Task<long> ContarEnPreparacionAsync(CancellationToken cancellationToken = default);
+
     Task<FacturaVentaBorradorResponse?> GetBorradorAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<VentaOperationResult<FacturaVentaBorradorResponse>> CreateBorradorAsync(BorradorCabeceraInput input, CancellationToken cancellationToken = default);

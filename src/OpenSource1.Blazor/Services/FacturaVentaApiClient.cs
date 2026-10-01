@@ -38,6 +38,9 @@ public sealed class FacturaVentaApiClient(HttpClient httpClient, ILogger<Factura
             ?? PagedResult<FacturaVentaBorradorResponse>.Vacio(paginacion ?? new PageRequest());
     }
 
+    public async Task<long> ContarEnPreparacionAsync(CancellationToken cancellationToken = default) =>
+        (await ListBorradoresAsync(null, new PageRequest(1, 1, "CreatedAtUtc", Descendente: true), cancellationToken)).Total;
+
     public Task<FacturaVentaBorradorResponse?> GetBorradorAsync(Guid id, CancellationToken cancellationToken = default) =>
         VentaApiRespuestas.GetOrNullAsync<FacturaVentaBorradorResponse>(
             httpClient, $"{BaseRoute}/borradores/{id}", "el borrador de factura", logger, cancellationToken);

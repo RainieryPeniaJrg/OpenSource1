@@ -298,6 +298,11 @@ public sealed class NotasCreditoVentaApiTests(PostgresTestFixture fixture) : ICl
             new { facturaVentaNumero = factura, copiarLineas = false, serieRegistroId = serieRegistro });
         Assert.Equal(HttpStatusCode.Created, deAdministrador.StatusCode);
         Assert.Equal(serieRegistro, (await deAdministrador.Content.ReadFromJsonAsync<NotaCreditoVentaBorradorResponse>())!.SerieRegistroId);
+
+        // Spec alta rápida: total de la lista = vista previa (sin notas previas sobre la factura, sin topes que apliquen).
+        var vistaPrevia = await GetAsync<TotalesFactura>($"/api/notas-credito-venta/borradores/{borrador.Id}/totales");
+        var enLista = await GetAsync<PagedResult<NotaCreditoVentaBorradorResponse>>($"/api/notas-credito-venta/borradores?numero={borrador.Numero}");
+        Assert.Equal(vistaPrevia.ImporteTotal, Assert.Single(enLista.Items).ImporteTotal);
     }
 
     private async Task<Guid> CrearCuentaAsync(string numero)

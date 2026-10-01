@@ -88,6 +88,10 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
         Assert.Equal(AlmacenIds.Principal, borrador.AlmacenId);
         Assert.Equal((EstadoFacturaBorrador.Abierta, "DOP", 0), (borrador.Estado, borrador.Moneda, borrador.NumeroLineas));
         Assert.True(borrador.Xmin > 0);
+        Assert.False(string.IsNullOrWhiteSpace(borrador.GrupoNegocioCodigo));
+        Assert.False(string.IsNullOrWhiteSpace(borrador.GrupoIvaNegocioCodigo));
+        Assert.False(string.IsNullOrWhiteSpace(borrador.GrupoClienteContableCodigo));
+        Assert.Equal(0m, borrador.ImporteTotal);
 
         // Numeración consecutiva de FV-BORR.
         var otro = await CrearBorradorOkAsync(client, new { socioNegocioId = socio });
@@ -544,6 +548,71 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
             totales!.Grupos);
         Assert.Equal((80.09m, 5.42m, 85.51m), (totales.ImporteSinIva, totales.ImporteIva, totales.ImporteTotal));
         Assert.Equal(HttpStatusCode.OK, (await Rol("Ejecutor").GetAsync($"{Base}/borradores/{borrador.Id}/totales")).StatusCode);
+
+        // Spec alta rápida: el listado "En preparación" muestra el mismo total que la vista previa.
+        Assert.Equal(totales.ImporteTotal, (await GetBorradorAsync(client, borrador.Id)).ImporteTotal);
+        var lista = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?numero={borrador.Numero}");
+        Assert.Equal(totales.ImporteTotal, Assert.Single(lista!.Items).ImporteTotal);
+    }
+
+    [Fact]
+    public async Task ImporteTotalSql_IgualALaCalculadora_VariosIvaDecimalesYMedios_SinComentariosNiBorradas()
+    {
+        // El total que calcula el SQL del listado debe coincidir al céntimo con CalculadoraIvaFactura (base e IVA redondeados a 2 por
+        // identificador, medios alejándose de cero). Importes de 4 decimales fijados por SQL para forzar los casos límite.
+        var client = Admin();
+        var borrador = await CrearBorradorOkAsync(client, new { socioNegocioId = await CrearSocioAsync(client, "Totales SQL") });
+        var valores = new (string Identificador, decimal Porcentaje, decimal Importe)[]
+        {
+            ("ITBIS18", 18m, 5.0025m), ("ITBIS18", 18m, 5.0025m),        // base 10.005 → 10.01 (al par sería 10.00); IVA 1.8018 → 1.80
+            ("MEDIO", 4.5m, 0.5000m), ("MEDIO", 4.5m, 0.5000m),          // base 1.00; IVA 0.045 → 0.05 (al par sería 0.04)
+            ("RARO", 13.33333m, 0.3333m), ("RARO", 13.33333m, 0.3334m),  // base 0.6667 → 0.67; IVA 0.0893333… → 0.09
+            ("EXENTO", 0m, 12.3456m),                                     // base 12.35; IVA 0
+        };
+        var lineas = new List<(LineaFacturaVentaBorradorResponse Linea, (string Identificador, decimal Porcentaje, decimal Importe) Valor)>();
+        foreach (var valor in valores)
+        {
+            lineas.Add((await CrearLineaOkAsync(client, borrador.Id, LineaCuenta(CuentaContableIds.Ventas)), valor));
+        }
+
+        await CrearLineaOkAsync(client, borrador.Id, new { tipo = TipoLineaFactura.Comentario, descripcion = "No suma" });
+        var borrada = await CrearLineaOkAsync(client, borrador.Id, LineaCuenta(CuentaContableIds.Ventas));
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"{Base}/lineas-borrador/{borrada.Id}")).StatusCode);
+        foreach (var (linea, valor) in lineas)
+        {
+            await EjecutarSqlAsync(
+                """UPDATE "LineasFacturaVentaBorrador" SET "IdentificadorIva" = @I, "PorcentajeIva" = @P, "ImporteLinea" = @L WHERE "Id" = @Id""",
+                new { I = valor.Identificador, P = valor.Porcentaje, L = valor.Importe, linea.Id });
+        }
+
+        var esperado = CalculadoraIvaFactura.Calcular(
+            [.. lineas.Select(l => new LineaCalculoIva(l.Linea.NumeroLinea, l.Valor.Identificador, l.Valor.Porcentaje, l.Valor.Importe))]);
+        Assert.Equal(25.97m, esperado.ImporteTotal); // 11.81 + 1.05 + 0.76 + 12.35
+
+        var totales = await client.GetFromJsonAsync<TotalesFactura>($"{Base}/borradores/{borrador.Id}/totales");
+        Assert.Equal(esperado.ImporteTotal, totales!.ImporteTotal);
+        Assert.Equal(esperado.ImporteTotal, (await GetBorradorAsync(client, borrador.Id)).ImporteTotal);
+        var lista = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?numero={borrador.Numero}");
+        Assert.Equal(esperado.ImporteTotal, Assert.Single(lista!.Items).ImporteTotal);
+    }
+
+    [Fact]
+    public async Task ConteoEnPreparacion_EsElTotalDeUnaPaginaDeUno_AbiertasYLiberadas()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente conteo");
+        var producto = await CrearProductoAsync(client, 10m);
+        await CrearBorradorOkAsync(client, new { socioNegocioId = socio });
+        var liberado = await CrearBorradorOkAsync(client, new
+        {
+            socioNegocioId = socio, primeraLinea = new { tipo = TipoLineaFactura.Producto, productoId = producto, cantidad = 1m, precioUnitario = 10m },
+        });
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"{Base}/borradores/{liberado.Id}/liberar", null)).StatusCode);
+
+        var pagina = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?socioId={socio}&tamanoPagina=1");
+
+        Assert.Equal(2L, pagina!.Total);
+        Assert.Single(pagina.Items);
     }
 
     [Fact]

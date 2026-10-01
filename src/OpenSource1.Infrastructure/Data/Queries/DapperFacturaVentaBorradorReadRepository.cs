@@ -23,12 +23,20 @@ public sealed class DapperFacturaVentaBorradorReadRepository(IDbSession session)
                f."NombreFacturacion", f."RazonSocialFacturacion", f."TipoDocumentoFiscal", f."NumeroDocumentoFiscal",
                f."DireccionFacturacionLinea1", f."DireccionFacturacionLinea2", f."CiudadFacturacion", f."PaisCodigoFacturacion",
                f."FechaRegistro", f."FechaDocumento", f."FechaVencimiento", f."TerminoPagoId", t."Codigo" AS "TerminoPagoCodigo",
-               f."GrupoNegocioId", f."GrupoIvaNegocioId", f."GrupoClienteContableId", f."AlmacenId", a."Codigo" AS "AlmacenCodigo",
+               f."GrupoNegocioId", (SELECT g."Codigo" FROM "GruposNegocio" g WHERE g."Id" = f."GrupoNegocioId") AS "GrupoNegocioCodigo",
+               f."GrupoIvaNegocioId", (SELECT g."Codigo" FROM "GruposIvaNegocio" g WHERE g."Id" = f."GrupoIvaNegocioId") AS "GrupoIvaNegocioCodigo",
+               f."GrupoClienteContableId", (SELECT g."Codigo" FROM "GruposClienteContable" g WHERE g."Id" = f."GrupoClienteContableId") AS "GrupoClienteContableCodigo",
+               f."AlmacenId", a."Codigo" AS "AlmacenCodigo",
                f."Estado", f."Moneda", f."Descripcion",
                f."SerieBorradorId", sb."Codigo" AS "SerieBorradorCodigo", f."SerieRegistroId", sr."Codigo" AS "SerieRegistroCodigo",
                f."FacturaVentaNumero",
                (SELECT COUNT(*) FROM "LineasFacturaVentaBorrador" l
                 WHERE l."FacturaVentaBorradorId" = f."Id" AND l."IsDeleted" = false)::int AS "NumeroLineas",
+               COALESCE((SELECT SUM(g."Base" + ROUND(g."Base" * g."PorcentajeIva" / 100, 2))
+                         FROM (SELECT ROUND(SUM(l."ImporteLinea"), 2) AS "Base", l."PorcentajeIva"
+                               FROM "LineasFacturaVentaBorrador" l
+                               WHERE l."FacturaVentaBorradorId" = f."Id" AND l."IsDeleted" = false AND l."Tipo" <> 3
+                               GROUP BY l."IdentificadorIva", l."PorcentajeIva") g), 0) AS "ImporteTotal",
                f.xmin::text::bigint AS "Xmin", f."CreatedAtUtc", f."UpdatedAtUtc", f."CreatedBy", f."UpdatedBy"
         FROM "FacturasVentaBorrador" f
         LEFT JOIN "SociosNegocio" sv ON sv."Id" = f."SocioNegocioId"

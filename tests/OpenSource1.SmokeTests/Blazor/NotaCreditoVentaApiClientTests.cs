@@ -37,6 +37,20 @@ public sealed class NotaCreditoVentaApiClientTests
     }
 
     [Fact]
+    public async Task ContarEnPreparacion_PideUnaPaginaDeUno_SinEstado_YDevuelveElTotal()
+    {
+        var handler = new Grabador(HttpStatusCode.OK, """{"items":[],"pagina":1,"tamanoPagina":1,"total":7}""");
+        var client = Cliente(handler);
+
+        var total = await client.ContarEnPreparacionAsync();
+
+        Assert.Equal(7L, total);
+        Assert.EndsWith("api/notas-credito-venta/borradores", handler.Uri!.AbsolutePath);
+        Assert.Contains("tamanoPagina=1", handler.Uri.Query);
+        Assert.DoesNotContain("estado=", handler.Uri.Query);
+    }
+
+    [Fact]
     public async Task Lineas_AltaYModificacion_EnvianCantidadDevolucionYXmin()
     {
         var alta = new Grabador(HttpStatusCode.Created, "{}");
