@@ -6,10 +6,11 @@
 
 @* Spec alta rápida: la lista de borradores de nota es ahora la pestaña "En preparación" de /notas-credito-venta. La ruta se conserva
    para los enlaces guardados: ?editId= abre la nota en preparación; ?estado=3 (borradores ya posteados) lleva a las registradas; los
-   filtros factura/nombre se conservan (numero se ignora: el número interno no es un filtro de la pestaña). Aloja también
-   CabeceraNotaForm, el modelo de la cabecera editable de la nota en preparación. *@
+   filtros numero/factura/nombre se conservan. Aloja también CabeceraNotaForm, el modelo de la cabecera editable de la nota en
+   preparación. *@
 
 @code {
+    [SupplyParameterFromQuery(Name = "numero")] private string? SearchNumero { get; set; }
     [SupplyParameterFromQuery(Name = "factura")] private string? SearchFactura { get; set; }
     [SupplyParameterFromQuery(Name = "nombre")] private string? SearchNombre { get; set; }
     [SupplyParameterFromQuery(Name = "estado")] private int? SearchEstado { get; set; }
@@ -24,6 +25,7 @@
         }
 
         var destino = SearchEstado == 3 ? "/notas-credito-venta" : RutasPreparacion.ListaNotas;
+        if (!string.IsNullOrWhiteSpace(SearchNumero)) destino = RetornoLocal.ConParametro(destino, "numero", SearchNumero.Trim());
         if (!string.IsNullOrWhiteSpace(SearchFactura)) destino = RetornoLocal.ConParametro(destino, "factura", SearchFactura.Trim());
         if (!string.IsNullOrWhiteSpace(SearchNombre)) destino = RetornoLocal.ConParametro(destino, "nombre", SearchNombre.Trim());
         Nav.NavigateTo(destino, replace: true);

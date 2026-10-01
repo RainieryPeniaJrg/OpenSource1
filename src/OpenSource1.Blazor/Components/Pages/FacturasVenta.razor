@@ -35,7 +35,7 @@
 }
 else
 {
-    <PageToolbar Titulo="@($"Factura {Numero}")" Subtitulo="Documento legal posteado: cabecera, líneas y líneas de IVA."
+    <PageToolbar Titulo="@($"Factura {Numero}")" Subtitulo="Documento legal registrado: cabecera, líneas y líneas de IVA."
                  Migas="@MigasDetalle" Permisos="@permisos"
                  SeleccionId="@detalle?.Cabecera.Numero"
                  Crear="@CrearDetalle" Ver="@VerDetalle" RetornoUrl="@UrlFactura">
@@ -93,7 +93,7 @@ else
 else if (Numero is null)
 {
     @* PF6: el descarte de la pestaña "En preparación" también está en el árbol aquí (formulario vacío). *@
-    <ListaFacturasEnPreparacion SoloFormulario="true" />
+    <ListaFacturasEnPreparacion SoloFormulario="true" Ok="@Ok" />
 
     <!-- ── Filtros ── -->
     <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">

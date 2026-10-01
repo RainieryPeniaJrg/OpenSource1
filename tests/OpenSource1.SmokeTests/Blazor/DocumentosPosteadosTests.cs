@@ -69,6 +69,9 @@ public sealed class DocumentosPosteadosTests
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/FV-000009");
 
         Assert.Contains("Preparación", html);
+        // Spec alta rápida: "Postear" → "Registrar" en toda la UI de Facturación.
+        Assert.Contains("Documento legal registrado: cabecera, líneas y líneas de IVA.", HtmlSsr.Decodificar(html));
+        Assert.DoesNotContain("posteado", HtmlSsr.Decodificar(html));
         Assert.DoesNotContain("Ver preparación", html);
         Assert.DoesNotContain("href=\"/facturas-venta/en-preparacion/", html);
         Assert.DoesNotContain("href=\"/facturas-venta/borradores/", html.Replace("href=\"/facturas-venta/borradores\"", string.Empty, StringComparison.Ordinal));

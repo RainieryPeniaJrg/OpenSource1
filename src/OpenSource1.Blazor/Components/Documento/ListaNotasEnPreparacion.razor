@@ -9,7 +9,12 @@
    confirmación. El total es la suma de las líneas tal como están (ImporteTotal de la API, sin los topes de lo que queda por acreditar
    de la factura): la columna lo dice ("Total estimado") y la nota al pie explica que el importe definitivo se fija al registrar. Los
    filtros, la página y deleteId llegan de la página como parámetros. El formulario de descarte está siempre en el árbol (PF6: también
-   en la pestaña "Registradas", con SoloFormulario): un POST obsoleto o forzado recibe el mensaje real de la API. *@
+   en la pestaña "Registradas", con SoloFormulario): un POST obsoleto o forzado recibe el mensaje real de la API; su ?ok=descartada se
+   muestra en ambas pestañas. El número interno (numero) es el filtro con que llega "Ver todos" de la búsqueda global. *@
+@if (ListaPreparacion.MensajeOk(Ok, "nota de crédito") is { } mensajeOk)
+{
+    <div class="mb-6"><ActionFeedback Type="success" Message="@mensajeOk" /></div>
+}
 @if (SoloFormulario)
 {
     <ResumenErrores Mensaje="@error" Errores="@errores" />
@@ -17,17 +22,13 @@
     return;
 }
 
-@if (ListaPreparacion.MensajeOk(Ok, "nota de crédito") is { } mensajeOk)
-{
-    <div class="mb-6"><ActionFeedback Type="success" Message="@mensajeOk" /></div>
-}
 <ResumenErrores Mensaje="@error" Errores="@errores" />
 
 <div class="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
     <form method="get" action="/notas-credito-venta" data-enhance class="p-4 sm:p-6">
         <input type="hidden" name="estado" value="preparacion" />
         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div class="grid max-w-3xl flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="grid max-w-4xl flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-500" for="prepNombre">Cliente</label>
                     <input id="prepNombre" type="text" name="nombre" value="@Nombre" placeholder="ej. Comercial" class="@VentasCss.Filtro" />
@@ -35,6 +36,10 @@
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-500" for="prepFactura">Factura de origen</label>
                     <input id="prepFactura" type="text" name="factura" value="@Factura" placeholder="ej. FV-000123" class="@VentasCss.Filtro" />
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-500" for="prepNumero">Número interno</label>
+                    <input id="prepNumero" type="text" name="numero" value="@Numero" class="@VentasCss.Filtro" />
                 </div>
             </div>
             <div class="flex items-center gap-2">
@@ -127,6 +132,7 @@ else
 }
 
 @code {
+    [Parameter] public string? Numero { get; set; }
     [Parameter] public string? Factura { get; set; }
     [Parameter] public string? Nombre { get; set; }
     [Parameter] public int Pagina { get; set; } = 1;
@@ -159,8 +165,9 @@ else
 
         try
         {
-            // Sin estado = en preparación (Abierta); el número interno no es un filtro de la pestaña.
-            var filtro = new NotaCreditoVentaBorradorFiltro(null, ListaPreparacion.Vacio(Factura), ListaPreparacion.Vacio(Nombre), null);
+            // Sin estado = en preparación (Abierta).
+            var filtro = new NotaCreditoVentaBorradorFiltro(
+                ListaPreparacion.Vacio(Numero), ListaPreparacion.Vacio(Factura), ListaPreparacion.Vacio(Nombre), null);
             var (resultado, paginaCargada) = await ListaPreparacion.CargarAsync(p => NotaApiClient.ListBorradoresAsync(filtro, p), Pagina);
             (notas, total, totalPaginas, pagina) = (resultado.Items, resultado.Total, resultado.TotalPaginas, paginaCargada);
         }
@@ -195,5 +202,5 @@ else
     }
 
     private string Url(int? pagina = null, Guid? deleteId = null) =>
-        ListaPreparacion.Url(RutasPreparacion.ListaNotas, [("factura", Factura), ("nombre", Nombre)], pagina ?? this.pagina, deleteId);
+        ListaPreparacion.Url(RutasPreparacion.ListaNotas, [("numero", Numero), ("factura", Factura), ("nombre", Nombre)], pagina ?? this.pagina, deleteId);
 }

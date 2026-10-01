@@ -143,6 +143,34 @@ public sealed class ListasEnPreparacionTests
         Assert.Contains("La factura está liberada: reábrala antes de descartarla.", html);
     }
 
+    /// <summary>"Ver todos" de la búsqueda global (numero=…) filtra la pestaña de notas por número interno y lo conserva en sus enlaces.</summary>
+    [Fact]
+    public async Task Notas_EnPreparacion_FiltroNumero_LlegaALaApi()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+        var notas = app.Simular<INotaCreditoVentaApiClient>();
+
+        var html = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), "/notas-credito-venta?estado=preparacion&numero=00000003"));
+
+        notas.Verify(c => c.ListBorradoresAsync(It.Is<NotaCreditoVentaBorradorFiltro?>(f => f != null && f.Numero == "00000003"), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        Assert.Contains("name=\"numero\" value=\"00000003\"", html);
+        Assert.Contains($"href=\"/notas-credito-venta?estado=preparacion&numero=00000003&deleteId={IdNota}\"", html);
+    }
+
+    /// <summary>Un descarte enviado desde la pestaña "Registradas" (formulario siempre en el árbol) también muestra su mensaje allí.</summary>
+    [Theory]
+    [InlineData("/facturas-venta?ok=descartada", "Factura descartada.")]
+    [InlineData("/notas-credito-venta?ok=descartada", "Nota de crédito descartada.")]
+    public async Task Registradas_MensajeDeDescarte(string url, string mensaje)
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+
+        var html = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), url));
+
+        Assert.Contains(mensaje, html);
+        Assert.DoesNotContain("data-testid=\"tabla-en-preparacion\"", html);
+    }
+
     /// <summary>El total de la nota en preparación no lleva los topes de lo que queda por acreditar: se rotula como estimado.</summary>
     [Fact]
     public async Task Notas_EnPreparacion_TotalEstimado_FacturaDeOrigen_YDescartar()
@@ -168,6 +196,7 @@ public sealed class ListasEnPreparacionTests
     [InlineData("/facturas-venta/borradores?editId=7d0c9a51-0000-0000-0000-0000000008a1", "/facturas-venta/en-preparacion/7d0c9a51-0000-0000-0000-0000000008a1")]
     [InlineData("/notas-credito-venta/borradores", "/notas-credito-venta?estado=preparacion")]
     [InlineData("/notas-credito-venta/borradores?editId=7d0c9a51-0000-0000-0000-0000000008a3", "/notas-credito-venta/en-preparacion/7d0c9a51-0000-0000-0000-0000000008a3")]
+    [InlineData("/notas-credito-venta/borradores?numero=00000003&factura=FV-1", "/notas-credito-venta?estado=preparacion&numero=00000003&factura=FV-1")]
     public async Task ListasAntiguas_Redirigen(string origen, string destino)
     {
         using var app = Configurar(new BlazorSsrFactory());

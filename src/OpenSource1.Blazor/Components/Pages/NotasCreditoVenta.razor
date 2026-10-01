@@ -60,12 +60,12 @@
 
 @if (EnPreparacion)
 {
-    <ListaNotasEnPreparacion Factura="@SearchFactura" Nombre="@SearchNombre" Pagina="@Pagina" DeleteId="@DeleteId" Ok="@Ok" Permisos="@permisos" />
+    <ListaNotasEnPreparacion Numero="@SearchNumero" Factura="@SearchFactura" Nombre="@SearchNombre" Pagina="@Pagina" DeleteId="@DeleteId" Ok="@Ok" Permisos="@permisos" />
 }
 else if (Numero is null)
 {
     @* PF6: el descarte de la pestaña "En preparación" también está en el árbol aquí (formulario vacío). *@
-    <ListaNotasEnPreparacion SoloFormulario="true" />
+    <ListaNotasEnPreparacion SoloFormulario="true" Ok="@Ok" />
 
     <!-- ── Filtros ── -->
     <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">

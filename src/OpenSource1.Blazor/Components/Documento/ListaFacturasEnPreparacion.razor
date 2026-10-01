@@ -9,7 +9,11 @@
    como insignia de texto; "Continuar" abre la factura y "Descartar" (CanDelete, solo las abiertas: una heredada Liberada se reabre
    antes en su página) pide confirmación. Los filtros, la página y deleteId llegan de la página como parámetros. El formulario de
    descarte está siempre en el árbol (PF6: también en la pestaña "Registradas", con SoloFormulario): un POST obsoleto o forzado
-   recibe el mensaje real de la API. *@
+   recibe el mensaje real de la API; su ?ok=descartada se muestra en ambas pestañas. *@
+@if (ListaPreparacion.MensajeOk(Ok, "factura") is { } mensajeOk)
+{
+    <div class="mb-6"><ActionFeedback Type="success" Message="@mensajeOk" /></div>
+}
 @if (SoloFormulario)
 {
     <ResumenErrores Mensaje="@error" Errores="@errores" />
@@ -17,10 +21,6 @@
     return;
 }
 
-@if (ListaPreparacion.MensajeOk(Ok, "factura") is { } mensajeOk)
-{
-    <div class="mb-6"><ActionFeedback Type="success" Message="@mensajeOk" /></div>
-}
 <ResumenErrores Mensaje="@error" Errores="@errores" />
 
 <div class="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
