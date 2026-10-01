@@ -107,7 +107,10 @@ public sealed class NotasCreditoVentaController(ISender sender) : ControllerBase
         return result.EsFallo ? result.ToActionResult() : Ok(result.Valor);
     }
 
-    /// <summary>Crea un borrador desde una factura posteada (opcionalmente con todas sus líneas pendientes).</summary>
+    /// <summary>
+    /// Crea un borrador desde una factura posteada (spec alta rápida): por defecto con todas sus líneas pendientes (<c>copiarLineas</c>)
+    /// y la devolución al inventario de las de producto (<c>devolverInventario</c>); series configuradas (la de registro solo la cambia el Administrador).
+    /// </summary>
     [HttpPost("borradores")]
     [Authorize(Policy = ApplicationPolicies.CanAdd)]
     [ProducesResponseType<NotaCreditoVentaBorradorResponse>(StatusCodes.Status201Created)]
@@ -117,7 +120,7 @@ public sealed class NotasCreditoVentaController(ISender sender) : ControllerBase
         var result = await sender.Send(
             new CreateNotaCreditoVentaBorradorCommand(
                 request.FacturaVentaNumero, request.FechaRegistro, request.FechaDocumento, request.Descripcion,
-                request.CopiarLineas, request.DevolverInventario, request.SerieBorradorId, request.SerieRegistroId),
+                request.CopiarLineas ?? true, request.DevolverInventario ?? true, request.SerieBorradorId, request.SerieRegistroId),
             cancellationToken);
 
         return result.EsFallo
@@ -258,8 +261,8 @@ public sealed record CreateNotaCreditoVentaBorradorRequest(
     DateOnly? FechaRegistro = null,
     DateOnly? FechaDocumento = null,
     string? Descripcion = null,
-    bool CopiarLineas = false,
-    bool DevolverInventario = false,
+    bool? CopiarLineas = null,
+    bool? DevolverInventario = null,
     Guid? SerieBorradorId = null,
     Guid? SerieRegistroId = null);
 

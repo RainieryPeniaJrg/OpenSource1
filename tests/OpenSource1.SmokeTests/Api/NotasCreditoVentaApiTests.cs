@@ -66,7 +66,7 @@ public sealed class NotasCreditoVentaApiTests(PostgresTestFixture fixture) : ICl
         var (factura, movimientoFactura) = await PostearFacturaAsync(socio, new DateOnly(2022, 1, 10), (ingresos, 20m), (producto, 2m, 50m, almacen));
 
         // Nota parcial 20/01 por la API: 1 u con devolución (50 + 9 = 59), aplicada automáticamente a la factura.
-        var creado = await _client.PostAsJsonAsync("/api/notas-credito-venta/borradores", new { facturaVentaNumero = factura, fechaRegistro = "2022-01-20" });
+        var creado = await _client.PostAsJsonAsync("/api/notas-credito-venta/borradores", new { facturaVentaNumero = factura, fechaRegistro = "2022-01-20", copiarLineas = false });
         Assert.True(creado.StatusCode == HttpStatusCode.Created, await creado.Content.ReadAsStringAsync());
         var borrador = (await creado.Content.ReadFromJsonAsync<NotaCreditoVentaBorradorResponse>())!;
         Assert.Equal((factura, 141.6m, 0), (borrador.FacturaVentaNumero, borrador.FacturaImporteTotal, borrador.NumeroLineas));
@@ -259,6 +259,45 @@ public sealed class NotasCreditoVentaApiTests(PostgresTestFixture fixture) : ICl
         using var respuesta = await _client.GetAsync(url);
         Assert.True(respuesta.StatusCode == HttpStatusCode.OK, $"{url} → {(int)respuesta.StatusCode}: {await respuesta.Content.ReadAsStringAsync()}");
         return (await respuesta.Content.ReadFromJsonAsync<T>())!;
+    }
+
+    [Fact]
+    public async Task AltaRapida_SinOpciones_CopiaTodoLoPendienteConDevolucion_YSeriesSoloElAdministrador()
+    {
+        var ingresos = await CrearCuentaAsync("4195");
+        var producto = await ProductoClasificadoAsync();
+        var almacen = await _prueba.SembrarAlmacenAsync();
+        var socio = await CrearSocioAsync("Cliente nota rapida");
+        await _prueba.RegistrarOkAsync(LibroInventarioPrueba.Entrada(producto, almacen, 10m, 5m, new DateOnly(2023, 7, 5)));
+        var (factura, _) = await PostearFacturaAsync(socio, new DateOnly(2023, 7, 10), (ingresos, 20m), (producto, 2m, 50m, almacen));
+        var (serieBorrador, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.BorradorNotaCreditoVenta);
+        var (serieRegistro, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.NotaCreditoVenta);
+
+        // Sin copiarLineas ni devolverInventario: nota total con devolución y las series configuradas.
+        var creado = await _client.PostAsJsonAsync("/api/notas-credito-venta/borradores", new { facturaVentaNumero = factura, fechaRegistro = "2023-07-12" });
+        Assert.True(creado.StatusCode == HttpStatusCode.Created, await creado.Content.ReadAsStringAsync());
+        var borrador = (await creado.Content.ReadFromJsonAsync<NotaCreditoVentaBorradorResponse>())!;
+        Assert.Equal((2, "NC-BORR", "NC"), (borrador.NumeroLineas, borrador.SerieBorradorCodigo, borrador.SerieRegistroCodigo));
+        var lineas = await GetAsync<List<LineaNotaCreditoVentaBorradorResponse>>($"/api/notas-credito-venta/borradores/{borrador.Id}/lineas");
+        Assert.Equal([(TipoLineaFactura.Producto, 2m, true), (TipoLineaFactura.CuentaContable, 1m, false)],
+            lineas.OrderBy(l => l.Tipo).Select(l => (l.Tipo, l.Cantidad, l.DevolverInventario)));
+
+        // Serie de borradores: 400 para todos. Serie de registro: 400 para el Ejecutor, 201 para el Administrador.
+        var conSerieBorrador = await _client.PostAsJsonAsync("/api/notas-credito-venta/borradores",
+            new { facturaVentaNumero = factura, copiarLineas = false, serieBorradorId = serieBorrador });
+        Assert.Equal(HttpStatusCode.BadRequest, conSerieBorrador.StatusCode);
+        Assert.Contains("SerieBorradorId", await conSerieBorrador.Content.ReadAsStringAsync());
+        using var ejecutor = _factory.CreateClient();
+        ejecutor.DefaultRequestHeaders.Add("X-Test-User", "ejecutor");
+        ejecutor.DefaultRequestHeaders.Add("X-Test-Roles", "Ejecutor");
+        var deEjecutor = await ejecutor.PostAsJsonAsync("/api/notas-credito-venta/borradores",
+            new { facturaVentaNumero = factura, copiarLineas = false, serieRegistroId = serieRegistro });
+        Assert.Equal(HttpStatusCode.BadRequest, deEjecutor.StatusCode);
+        Assert.Contains("administrador", await deEjecutor.Content.ReadAsStringAsync());
+        var deAdministrador = await _client.PostAsJsonAsync("/api/notas-credito-venta/borradores",
+            new { facturaVentaNumero = factura, copiarLineas = false, serieRegistroId = serieRegistro });
+        Assert.Equal(HttpStatusCode.Created, deAdministrador.StatusCode);
+        Assert.Equal(serieRegistro, (await deAdministrador.Content.ReadFromJsonAsync<NotaCreditoVentaBorradorResponse>())!.SerieRegistroId);
     }
 
     private async Task<Guid> CrearCuentaAsync(string numero)

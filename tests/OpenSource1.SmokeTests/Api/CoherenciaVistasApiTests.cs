@@ -306,7 +306,7 @@ public sealed class CoherenciaVistasApiTests(PostgresTestFixture fixture) : ICla
     {
         var facturas = await GetAsync<PagedResult<MovimientoClienteResponse>>($"/api/clientes/{socio}/movimientos?tipoDocumento=1");
         var numeroFactura = facturas.Items.Single(m => m.Id == movimientoFactura).NumeroDocumento;
-        var creado = await _client.PostAsJsonAsync("/api/notas-credito-venta/borradores", new { facturaVentaNumero = numeroFactura, fechaRegistro });
+        var creado = await _client.PostAsJsonAsync("/api/notas-credito-venta/borradores", new { facturaVentaNumero = numeroFactura, fechaRegistro, copiarLineas = false });
         Assert.True(creado.StatusCode == HttpStatusCode.Created, await creado.Content.ReadAsStringAsync());
         var borrador = (await creado.Content.ReadFromJsonAsync<NotaCreditoVentaBorradorResponse>())!;
         var acreditables = await GetAsync<List<LineaFacturaAcreditableResponse>>($"/api/notas-credito-venta/borradores/{borrador.Id}/lineas-acreditables");

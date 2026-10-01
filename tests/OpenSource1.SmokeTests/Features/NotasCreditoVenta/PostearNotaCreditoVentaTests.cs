@@ -46,6 +46,24 @@ public sealed class PostearNotaCreditoVentaTests(PostgresTestFixture fixture) : 
     // ----- Nota total y parcial -----
 
     [Fact]
+    public async Task NotaTotalTrasUnaParcial_CopiaSoloLoPendienteDeCadaLinea()
+    {
+        var socio = await SocioAsync();
+        var almacen = await _prueba.SembrarAlmacenAsync();
+        var producto = await ProductoAsync();
+        await _prueba.RegistrarOkAsync(LibroInventarioPrueba.Entrada(producto, almacen, 10m, 4m, D1));
+        var factura = await FacturaAsync(socio, almacen, P(producto, 3m, 50m));
+        var parcial = Ok(await CrearBorradorAsync(factura));
+        Ok(await LineaAsync(parcial.Id, Assert.Single(await LineasFacturaAsync(factura)).Id, 1m, devolver: true));
+        Ok(await PostearAsync(parcial.Id));
+
+        var total = Ok(await CrearBorradorAsync(factura, copiar: true, devolver: true));
+
+        var linea = Assert.Single(await LineasBorradorAsync(total.Id));
+        Assert.Equal((2m, true), (linea.Cantidad, linea.DevolverInventario));
+    }
+
+    [Fact]
     public async Task NotaTotal_ConDevolucion_Documento_Entrada_ClienteAplicado_AsientoInverso_YFacturaSinPendiente()
     {
         var socio = await SocioAsync();
