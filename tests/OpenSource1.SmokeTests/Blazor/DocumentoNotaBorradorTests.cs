@@ -95,18 +95,14 @@ public sealed class DocumentoNotaBorradorTests
     }
 
     [Fact]
-    public async Task RutaEditar_Redirige_YListadoConFiltroPosteada()
+    public async Task RutaEditar_Redirige()
     {
         using var app = Configurar(new BlazorSsrFactory());
-        var api = app.Simular<INotaCreditoVentaApiClient>();
 
         var respuesta = await app.Cliente().GetAsync($"{UrlAntigua(IdAbierta)}/editar");
-        var lista = await HtmlSsr.HtmlAsync(app.Cliente(), "/notas-credito-venta/borradores?estado=3");
 
         Assert.Equal(HttpStatusCode.Redirect, respuesta.StatusCode);
         Assert.Equal(Url(IdAbierta), FormulariosSsr.Destino(respuesta));
-        Assert.Contains("<option value=\"3\" selected", lista);
-        api.Verify(c => c.ListBorradoresAsync(It.Is<NotaCreditoVentaBorradorFiltro?>(f => f!.Estado == 3), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     [Fact]
@@ -335,25 +331,6 @@ public sealed class DocumentoNotaBorradorTests
         Assert.Contains("<a href=\"/notas-credito-venta/borradores?estado=3\" data-testid=\"cancelar-cabecera\"", html);
         Assert.Equal($"{Url(IdAbierta)}?{retorno}&ok=modificado", FormulariosSsr.Destino(guardado));
         Assert.Equal("/notas-credito-venta/borradores?estado=3&ok=descartada", FormulariosSsr.Destino(eliminado));
-    }
-
-    [Fact]
-    public async Task Listado_SeleccionPosteada_SinEditarNiEliminar()
-    {
-        using var app = Configurar(new BlazorSsrFactory());
-        app.Simular<INotaCreditoVentaApiClient>()
-            .Setup(c => c.ListBorradoresAsync(It.IsAny<NotaCreditoVentaBorradorFiltro?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PagedResult<NotaCreditoVentaBorradorResponse>(
-                [Nota(IdPosteada, EstadoNotaCreditoBorrador.Posteada, "NC-000003"), Nota(IdAbierta, EstadoNotaCreditoBorrador.Abierta, null)], 1, 50, 2));
-
-        var posteada = await HtmlSsr.HtmlAsync(app.Cliente(), $"/notas-credito-venta/borradores?estado=3&sel={IdPosteada}");
-        var abierta = await HtmlSsr.HtmlAsync(app.Cliente(), $"/notas-credito-venta/borradores?sel={IdAbierta}");
-
-        Assert.DoesNotContain("data-testid=\"accion-editar\"", posteada);
-        Assert.DoesNotContain("data-testid=\"accion-eliminar\"", posteada);
-        Assert.Contains("Posteada", posteada);
-        // La lista sigue enlazando la ruta antigua (la lista con pestañas es de R8): redirige a la nota en preparación.
-        Assert.Contains($"<a data-testid=\"accion-editar\" href=\"{UrlAntigua(IdAbierta)}?returnUrl=", abierta);
     }
 
     [Theory]

@@ -2,325 +2,32 @@
 @attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authorization
-@using OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Dtos
-@using OpenSource1.Application.Security
-@using OpenSource1.Blazor.Services
-@using OpenSource1.Core.Common
-@using OpenSource1.Core.Enums
-@inject INotaCreditoVentaApiClient NotaApiClient
-@inject IAuthorizationService AuthorizationService
-@inject ILogger<NotasCreditoVentaBorradores> Logger
 @inject NavigationManager Nav
 
-<PageTitle>Borradores de nota de crédito – AxionERP</PageTitle>
-
-<PageToolbar Titulo="Borradores de nota de crédito" Subtitulo="Notas de crédito en preparación, siempre ligadas a una factura posteada: cabecera, líneas y posteo."
-             Migas="@Migas" Permisos="@permisos"
-             NuevoHref="@RetornoLocal.ConRetorno("/notas-credito-venta/nueva", UrlActual)" NuevoTexto="Nueva nota de crédito"
-             SeleccionId="@SeleccionValida?.ToString()"
-             Ver="@VerNota"
-             EditarUrl="@(SeleccionNoEditable ? null : id => RetornoLocal.ConRetorno($"/notas-credito-venta/borradores/{id}", UrlActual))"
-             EliminarUrl="@(SeleccionNoEditable ? null : id => BuildListUrl(deleteId: Guid.Parse(id)))">
-    <a href="/notas-credito-venta" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Notas posteadas</a>
-    <a href="/facturas-venta" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Facturas posteadas</a>
-</PageToolbar>
-
-@if (!string.IsNullOrWhiteSpace(message))
-{
-    <div class="mb-6">
-        @if (messageType == "success")
-        {
-            <ActionFeedback Type="success" Message="@message" />
-        }
-        else
-        {
-            <MessageBox Type="@messageType" Message="@message" Errors="@errores" />
-        }
-    </div>
-}
-
-@if (permisos?.CanAdd == true)
-{
-    <div class="mb-6"><MessageBox Type="info" Message="Para crear una nota de crédito pulse «Nueva nota de crédito» y elija el cliente y su factura, o abra la factura posteada (Ventas › Facturas) y pulse «Crear nota de crédito»." /></div>
-}
-
-<!-- ── Filtros ── -->
-<div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
-    <form method="get" action="/notas-credito-venta/borradores" data-enhance class="p-4 sm:p-6">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-4 max-w-5xl">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="filtroNumero">Número</label>
-                    <input id="filtroNumero" type="text" name="numero" value="@SearchNumero" placeholder="ej. 00000001" class="@FiltroCss" />
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="filtroFactura">Factura</label>
-                    <input id="filtroFactura" type="text" name="factura" value="@SearchFactura" placeholder="ej. 00000001" class="@FiltroCss" />
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="filtroNombre">Nombre de facturación</label>
-                    <input id="filtroNombre" type="text" name="nombre" value="@SearchNombre" placeholder="ej. Comercial" class="@FiltroCss" />
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="filtroEstado">Estado</label>
-                    <select id="filtroEstado" name="estado" class="@VentasCss.Filtro">
-                        <option value="" selected="@(EstadoFiltro is null)">Abiertas</option>
-                        <option value="3" selected="@(EstadoFiltro == 3)">Posteadas</option>
-                    </select>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <button type="submit" class="btn-press inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Consultar</button>
-                <a href="/notas-credito-venta/borradores" title="Limpiar campos" class="btn-press inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Limpiar campos</a>
-            </div>
-        </div>
-    </form>
-</div>
-
-<!-- ── Tabla ── -->
-<div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-8">
-    <div class="px-6 py-4 border-b border-slate-100">
-        <h2 class="text-sm font-semibold text-slate-700">Borradores</h2>
-        <p class="mt-1 text-xs text-slate-500">@total resultado(s) · página @Pagina de @Math.Max(totalPaginas, 1).</p>
-    </div>
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-100 text-sm" data-testid="tabla-borradores-nota">
-            <thead class="bg-slate-50">
-                <tr>
-                    <th class="px-4 py-3"><span class="sr-only">Seleccionar</span></th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Número</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Factura</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Facturar a</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha reg.</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Total factura</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Líneas</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Acciones</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50 bg-white">
-                @if (borradores.Count == 0)
-                {
-                    <tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">No hay borradores con esos criterios.</td></tr>
-                }
-                @foreach (var b in borradores)
-                {
-                    var marcada = b.Id == SeleccionValida;
-                    var posteada = b.Estado == EstadoNotaCreditoBorrador.Posteada;
-                    <tr @key="b.Id" class="@SeleccionFila.ClaseFila transition-colors @(marcada ? SeleccionFila.ClaseFilaSeleccionada : null)">
-                        <td class="px-4 py-3"><SeleccionFila Href="@BuildListUrl(sel: b.Id)" Seleccionada="@marcada" Etiqueta="@b.Numero" /></td>
-                        <td class="px-4 py-3"><a href="@($"/notas-credito-venta/borradores/{b.Id}")" class="font-mono text-xs font-semibold text-brand-700 hover:underline">@b.Numero</a></td>
-                        <td class="px-4 py-3"><a href="@($"/facturas-venta/{Uri.EscapeDataString(b.FacturaVentaNumero)}")" class="font-mono text-xs text-brand-700 hover:underline">@b.FacturaVentaNumero</a></td>
-                        <td class="px-4 py-3 text-slate-700">@b.SocioNegocioFacturarACodigo <span class="text-slate-400 text-xs">@b.NombreFacturacion</span></td>
-                        <td class="px-4 py-3 text-slate-500 text-xs">@EntradaFecha.Formatear(b.FechaRegistro)</td>
-                        <td class="px-4 py-3 text-xs @(posteada ? "font-semibold text-emerald-700" : "text-slate-600")" data-testid="estado-borrador">@VentasOpciones.EstadoNota(b.Estado)</td>
-                        <td class="px-4 py-3 text-right text-slate-700">@VentasOpciones.Importe(b.FacturaImporteTotal)</td>
-                        <td class="px-4 py-3 text-right text-slate-700">@b.NumeroLineas</td>
-                        <td class="px-4 py-3 text-right">
-                            <div class="flex items-center justify-end gap-2">
-                                <a href="@($"/notas-credito-venta/borradores/{b.Id}")" class="btn-press rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100" title="Abrir borrador">Abrir</a>
-                                @if (permisos?.CanModify == true && !posteada)
-                                {
-                                    <a href="@RetornoLocal.ConRetorno($"/notas-credito-venta/borradores/{b.Id}", UrlActual)" class="btn-press rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100" title="Modificar borrador">Modificar</a>
-                                }
-                                @if (permisos?.CanDelete == true && !posteada)
-                                {
-                                    <a href="@BuildListUrl(deleteId: b.Id)" class="btn-press rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100" title="Eliminar borrador">Eliminar</a>
-                                }
-                            </div>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-    @if (totalPaginas > 1)
-    {
-        <div class="flex items-center justify-between gap-3 border-t border-slate-100 px-6 py-4">
-            <p class="text-xs text-slate-500">Página @Pagina de @totalPaginas</p>
-            <div class="flex items-center gap-2">
-                @if (Pagina > 1)
-                {
-                    <a href="@BuildListUrl(pagina: Pagina - 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">« Anterior</a>
-                }
-                @if (Pagina < totalPaginas)
-                {
-                    <a href="@BuildListUrl(pagina: Pagina + 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">Siguiente »</a>
-                }
-            </div>
-        </div>
-    }
-</div>
-
-@if (MuestraDialogoBorrar)
-{
-    <ConfirmDialog Title="Confirmar eliminación" Message="Se eliminará el borrador de nota de crédito seleccionado con todas sus líneas. Esta acción no se puede deshacer." Variant="danger" CancelHref="@UrlActual">
-        <p class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-mono text-red-900">@(borradorAEliminar is null ? DeleteId?.ToString() : $"{borradorAEliminar.Numero} — factura {borradorAEliminar.FacturaVentaNumero} — {borradorAEliminar.NombreFacturacion} ({borradorAEliminar.NumeroLineas} línea(s))")</p>
-        <EditForm Model="DeleteInput" FormName="delete-borrador-nota" OnValidSubmit="DeleteAsync" class="mt-4">
-            <input type="hidden" name="DeleteInput.Id" value="@DeleteId" />
-            <button type="submit" class="btn-press rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Sí, eliminar</button>
-            <a href="@UrlActual" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
-        </EditForm>
-    </ConfirmDialog>
-}
-
-@* Formulario de borrado que el permiso o la URL ya no dejan mostrar: EditForm vacío con el MISMO FormName y handler, para que
-   un POST obsoleto o forzado reciba el mensaje real de la API. La cabecera se modifica en la página única /notas-credito-venta/borradores/{id}. *@
-@if (!MuestraDialogoBorrar)
-{
-    <EditForm Model="DeleteInput" FormName="delete-borrador-nota" OnValidSubmit="DeleteAsync"></EditForm>
-}
+@* Spec alta rápida: la lista de borradores de nota es ahora la pestaña "En preparación" de /notas-credito-venta. La ruta se conserva
+   para los enlaces guardados: ?editId= abre la nota en preparación; ?estado=3 (borradores ya posteados) lleva a las registradas; los
+   filtros factura/nombre se conservan (numero se ignora: el número interno no es un filtro de la pestaña). Aloja también
+   CabeceraNotaForm, el modelo de la cabecera editable de la nota en preparación. *@
 
 @code {
-    private const string FiltroCss = "block w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-brand-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-600/20";
-
-    [SupplyParameterFromForm(FormName = "delete-borrador-nota")] private DeleteForm? DeleteInput { get; set; }
-
-    [SupplyParameterFromQuery(Name = "numero")] private string? SearchNumero { get; set; }
     [SupplyParameterFromQuery(Name = "factura")] private string? SearchFactura { get; set; }
     [SupplyParameterFromQuery(Name = "nombre")] private string? SearchNombre { get; set; }
-    // 1 Abierta (por defecto, vacío) o 3 Posteada; cualquier otro valor se trata como el listado por defecto.
     [SupplyParameterFromQuery(Name = "estado")] private int? SearchEstado { get; set; }
-    private int? EstadoFiltro => SearchEstado is 3 ? 3 : null;
-    [SupplyParameterFromQuery(Name = "pagina")] private int Pagina { get; set; } = 1;
-    // Tolerante (ola final Fix-Features): un ?sel= ilegible se ignora como selección vacía; con Guid? el binder lanzaría.
-    [SupplyParameterFromQuery(Name = "sel")] private string? SelTexto { get; set; }
-    private Guid? Sel => InventarioVistasOpciones.ParseGuid(SelTexto);
-    // Solo para redirigir la ruta antigua (?editId=) directamente a la página única /notas-credito-venta/borradores/{id}, en un
-    // solo salto y conservando el returnUrl (ConversionDocumentosUsuariosTests.EditIdLegado_* fija el destino final).
     [SupplyParameterFromQuery(Name = "editId")] private Guid? EditId { get; set; }
-    [SupplyParameterFromQuery(Name = "deleteId")] private Guid? DeleteId { get; set; }
-    [SupplyParameterFromQuery(Name = "ok")] private string? Ok { get; set; }
 
-    private static readonly IReadOnlyList<Miga> Migas = [new("Facturación", "/modulos/facturacion"), new("Borradores de nota de crédito")];
-
-    private IReadOnlyList<NotaCreditoVentaBorradorResponse> borradores = [];
-    private long total;
-    private int totalPaginas;
-    private NotaCreditoVentaBorradorResponse? borradorAEliminar;
-    private string? message;
-    private string messageType = "info";
-    private IReadOnlyList<string> errores = [];
-    private PermisosPagina? permisos;
-
-    private bool MuestraDialogoBorrar => DeleteId.HasValue && permisos?.CanDelete == true;
-
-    /// <summary>Selección de la lista (?sel=) solo si el borrador está en la página cargada.</summary>
-    private Guid? SeleccionValida => NotaSeleccionada?.Id;
-
-    private NotaCreditoVentaBorradorResponse? NotaSeleccionada => Sel is { } s ? borradores.FirstOrDefault(b => b.Id == s) : null;
-
-    /// <summary>El borrador seleccionado no está Abierta (Posteada = solo lectura): sin Editar ni Eliminar en la barra (como en facturas).</summary>
-    private bool SeleccionNoEditable => NotaSeleccionada is { } n && n.Estado != EstadoNotaCreditoBorrador.Abierta;
-
-    private IReadOnlyList<AccionPagina> VerNota =>
-    [
-        new("Abrir borrador", IconosModulo.Documento, id => $"/notas-credito-venta/borradores/{id}", null, RequiereSeleccion: true),
-        new("Cliente", IconosModulo.Persona, _ => $"/clientes/{NotaSeleccionada?.SocioNegocioId}", ApplicationPolicies.CanConsult, RequiereSeleccion: true),
-    ];
-
-    /// <summary>URL de vuelta del listado (filtros, página y selección; sin ok/deleteId/editId).</summary>
-    private string UrlActual => RetornoLocal.SinTransitorios(BuildListUrl());
-
-    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        if (EditId is { } editId)
+        if (EditId is { } id)
         {
-            Nav.NavigateTo(RetornoLocal.ConRetorno($"/notas-credito-venta/borradores/{editId}", UrlActual), replace: true);
+            Nav.NavigateTo($"{RutasPreparacion.Nota}/{id}", replace: true);
             return;
         }
 
-        DeleteInput ??= new();
-        permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
-
-        await LoadAsync();
-
-        if (Ok == "eliminado")
-        {
-            Show("success", "Borrador de nota de crédito eliminado satisfactoriamente.");
-        }
-
-        if (MuestraDialogoBorrar)
-        {
-            try { borradorAEliminar = await NotaApiClient.GetBorradorAsync(DeleteId!.Value); }
-            catch (Exception ex) { Logger.LogWarning(ex, "Could not load borrador de nota {Id} to delete.", DeleteId); }
-        }
+        var destino = SearchEstado == 3 ? "/notas-credito-venta" : RutasPreparacion.ListaNotas;
+        if (!string.IsNullOrWhiteSpace(SearchFactura)) destino = RetornoLocal.ConParametro(destino, "factura", SearchFactura.Trim());
+        if (!string.IsNullOrWhiteSpace(SearchNombre)) destino = RetornoLocal.ConParametro(destino, "nombre", SearchNombre.Trim());
+        Nav.NavigateTo(destino, replace: true);
     }
-
-    private async Task LoadAsync()
-    {
-        try
-        {
-            var filtro = new NotaCreditoVentaBorradorFiltro(EmptyAsNull(SearchNumero), EmptyAsNull(SearchFactura), EmptyAsNull(SearchNombre), null, Estado: EstadoFiltro);
-            if (Pagina < 1) Pagina = 1;
-            // Orden explícito (PageRequest.Descendente es true por defecto): lo último creado primero.
-            var pagina = await NotaApiClient.ListBorradoresAsync(filtro, new PageRequest(Pagina, PageRequest.TamanoPorDefecto, "CreatedAtUtc", Descendente: true));
-            if (pagina.TotalPaginas > 0 && Pagina > pagina.TotalPaginas)
-            {
-                Pagina = pagina.TotalPaginas;
-                pagina = await NotaApiClient.ListBorradoresAsync(filtro, new PageRequest(Pagina, PageRequest.TamanoPorDefecto, "CreatedAtUtc", Descendente: true));
-            }
-
-            borradores = pagina.Items;
-            total = pagina.Total;
-            totalPaginas = pagina.TotalPaginas;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Could not load borradores de nota de crédito.");
-            Show("danger", "No fue posible cargar los borradores de nota de crédito.");
-        }
-    }
-
-    private async Task DeleteAsync()
-    {
-        // R17: la navegación va FUERA del try (NavigateTo puede lanzar NavigationException y el catch se la tragaría).
-        string? destino = null;
-        try
-        {
-            var result = await NotaApiClient.DeleteBorradorAsync(DeleteInput!.Id);
-            if (result.Succeeded)
-            {
-                destino = RetornoLocal.ConParametro(UrlActual, "ok", "eliminado");
-            }
-            else
-            {
-                errores = result.Errors ?? [];
-                Show("warning", result.Message);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Could not delete borrador de nota.");
-            Show("danger", "No fue posible eliminar el borrador.");
-        }
-
-        if (destino is not null)
-        {
-            Nav.NavigateTo(destino);
-        }
-    }
-
-    private string BuildListUrl(int? pagina = null, Guid? sel = null, Guid? deleteId = null)
-    {
-        var parameters = new List<string>();
-        if (!string.IsNullOrWhiteSpace(SearchNumero)) parameters.Add($"numero={Uri.EscapeDataString(SearchNumero)}");
-        if (!string.IsNullOrWhiteSpace(SearchFactura)) parameters.Add($"factura={Uri.EscapeDataString(SearchFactura)}");
-        if (!string.IsNullOrWhiteSpace(SearchNombre)) parameters.Add($"nombre={Uri.EscapeDataString(SearchNombre)}");
-        if (EstadoFiltro is { } estado) parameters.Add($"estado={estado}");
-        var paginaEfectiva = pagina ?? Pagina;
-        if (paginaEfectiva > 1) parameters.Add($"pagina={paginaEfectiva}");
-        var selEfectiva = sel ?? Sel;
-        if (selEfectiva.HasValue) parameters.Add($"sel={selEfectiva.Value}");
-        if (deleteId.HasValue) parameters.Add($"deleteId={deleteId.Value}");
-        return parameters.Count == 0 ? "/notas-credito-venta/borradores" : $"/notas-credito-venta/borradores?{string.Join("&", parameters)}";
-    }
-
-    private void Show(string type, string text) { messageType = type; message = text; }
-
-    private static string? EmptyAsNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>Cabecera editable de un borrador de nota: fechas (obligatorias al modificar), descripción y serie de registro.</summary>
     public sealed class CabeceraNotaForm : IValidatableObject
@@ -363,10 +70,5 @@
                 yield return resultado;
             }
         }
-    }
-
-    public sealed class DeleteForm
-    {
-        public Guid Id { get; set; }
     }
 }

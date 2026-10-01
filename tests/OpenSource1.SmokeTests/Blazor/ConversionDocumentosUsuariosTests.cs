@@ -45,9 +45,6 @@ public sealed class ConversionDocumentosUsuariosTests
 
     [Theory]
     [InlineData("/diarios-inventario?editId={0}", "/diarios-inventario/{0}/editar", "/diarios-inventario")]
-    [InlineData("/facturas-venta/borradores?editId={0}", "/facturas-venta/borradores/{0}", "/facturas-venta/borradores")]
-    [InlineData("/notas-credito-venta/borradores?editId={0}", "/notas-credito-venta/borradores/{0}", "/notas-credito-venta/borradores")]
-    // Los borradores de factura y nota van directamente a la página única (un solo salto), sin pasar por /editar.
     public async Task EditIdLegado_RedirigeALaRutaNueva(string origen, string destino, string lista)
     {
         using var app = Configurar(new BlazorSsrFactory());
@@ -61,6 +58,24 @@ public sealed class ConversionDocumentosUsuariosTests
         var returnUrl = Uri.UnescapeDataString(location[(location.IndexOf("returnUrl=", StringComparison.Ordinal) + "returnUrl=".Length)..]);
         Assert.StartsWith(lista, returnUrl);
         Assert.DoesNotContain("editId", returnUrl);
+    }
+
+    /// <summary>
+    /// Spec alta rápida: el ?editId= de las listas antiguas de borradores abre directamente la factura o la nota en preparación (un solo
+    /// salto, sin returnUrl: "Volver" de esa página ya lleva a la pestaña En preparación).
+    /// </summary>
+    [Theory]
+    [InlineData("/facturas-venta/borradores?editId={0}", "/facturas-venta/en-preparacion/{0}")]
+    [InlineData("/notas-credito-venta/borradores?editId={0}", "/notas-credito-venta/en-preparacion/{0}")]
+    public async Task EditIdLegado_Borradores_AbreLaPaginaEnPreparacion(string origen, string destino)
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+        var id = Guid.NewGuid();
+
+        var respuesta = await app.Cliente().GetAsync(string.Format(origen, id));
+
+        Assert.Equal(HttpStatusCode.Redirect, respuesta.StatusCode);
+        Assert.Equal(string.Format(destino, id), FormulariosSsr.Destino(respuesta));
     }
 
     [Fact]
@@ -184,23 +199,6 @@ public sealed class ConversionDocumentosUsuariosTests
     }
 
     [Fact]
-    public async Task Borradores_SoloAbiertosSeModificanOEliminan()
-    {
-        using var app = Configurar(new BlazorSsrFactory());
-
-        var abierto = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/borradores?numero=B&sel={IdBorrador}");
-        var liberado = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/borradores?sel={IdBorradorLiberado}");
-
-        Assert.Contains($"<a data-testid=\"accion-editar\" href=\"/facturas-venta/borradores/{IdBorrador}?returnUrl=", abierto);
-        Assert.Contains("href=\"/facturas-venta/nueva?returnUrl=", abierto);
-        Assert.Contains("value=\"B\"", abierto);
-        // Fix-Features C3 (R7): un liberado se selecciona (Ver ▾ Abrir borrador / Cliente) pero Modificar y Eliminar se ocultan.
-        Assert.DoesNotContain("data-testid=\"accion-editar\"", liberado);
-        Assert.DoesNotContain("data-testid=\"accion-eliminar\"", liberado);
-        Assert.Contains($"href=\"/facturas-venta/borradores/{IdBorradorLiberado}\"", liberado);
-    }
-
-    [Fact]
     public async Task FacturaNueva_CreaYAbreElBorrador()
     {
         using var app = Configurar(new BlazorSsrFactory());
@@ -261,17 +259,18 @@ public sealed class ConversionDocumentosUsuariosTests
     }
 
     [Theory]
-    [InlineData("/diarios-inventario", "save-lote-diario")]
-    [InlineData("/facturas-venta/borradores", "add-borrador")]
-    [InlineData("/notas-credito-venta/borradores", "update-borrador-nota")]
-    [InlineData("/admin/users", "create-user")]
-    public async Task Listado_SinFormulariosEnLinea(string ruta, string formName)
+    [InlineData("/diarios-inventario", "save-lote-diario", "page-toolbar")]
+    [InlineData("/facturas-venta?estado=preparacion", "add-borrador", "page-toolbar")]
+    // La lista de notas no usa PageToolbar: su cabecera propia lleva "+ Nueva nota de crédito" y las pestañas.
+    [InlineData("/notas-credito-venta?estado=preparacion", "update-borrador-nota", "pestanas-documento")]
+    [InlineData("/admin/users", "create-user", "page-toolbar")]
+    public async Task Listado_SinFormulariosEnLinea(string ruta, string formName, string barra)
     {
         using var app = Configurar(new BlazorSsrFactory());
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), ruta);
 
-        Assert.Contains("data-testid=\"page-toolbar\"", html);
+        Assert.Contains($"data-testid=\"{barra}\"", html);
         Assert.DoesNotContain($"value=\"{formName}\"", html);
         Assert.DoesNotContain("id=\"agregar\"", html);
         Assert.DoesNotContain("id=\"modificar\"", html);

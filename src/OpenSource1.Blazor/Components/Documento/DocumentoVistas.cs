@@ -7,6 +7,8 @@ using OpenSource1.Application.Features.FacturasVenta.Calculo;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
 using OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.NotasCreditoVenta.Posteadas.Dtos;
+using OpenSource1.Blazor.Services;
+using OpenSource1.Core.Common;
 using OpenSource1.Core.Enums;
 
 namespace OpenSource1.Blazor.Components.Documento;
@@ -227,4 +229,92 @@ public static class DatosDocumento
     /// <summary>"Razón social RNC" o "—".</summary>
     public static string Fiscal(string? razonSocial, string? numeroDocumento) =>
         string.IsNullOrWhiteSpace($"{razonSocial} {numeroDocumento}") ? "—" : $"{razonSocial} {numeroDocumento}".Trim();
+}
+
+/// <summary>
+/// Lógica común de las listas "En preparación" (<see cref="ListaFacturasEnPreparacion"/> y <see cref="ListaNotasEnPreparacion"/>;
+/// spec alta rápida, Parte 2): página de la API, URL de la lista con sus filtros, mensajes de <c>?ok=</c> y el descarte.
+/// </summary>
+public static class ListaPreparacion
+{
+    /// <summary>Insignia de estado de un documento en preparación (texto, no solo color).</summary>
+    public const string CssEstadoAbierta = "inline-flex rounded-full bg-green-50 px-2 py-0.5 font-semibold text-green-700";
+
+    /// <summary>Insignia de una factura heredada Liberada.</summary>
+    public const string CssEstadoLiberada = "inline-flex rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700";
+
+    /// <summary>
+    /// Mensaje del <c>?ok=</c> con que vuelven a la lista la página del documento ("Guardar para después" → <c>guardada</c>,
+    /// "Descartar" → <c>descartada</c>) y el descarte desde la propia lista; <c>eliminado</c> es el de la versión anterior.
+    /// <paramref name="documento"/> en minúscula y femenino ("factura", "nota de crédito").
+    /// </summary>
+    public static string? MensajeOk(string? ok, string documento) => ok switch
+    {
+        "descartada" or "eliminado" => $"{char.ToUpperInvariant(documento[0])}{documento[1..]} descartada.",
+        "guardada" => $"La {documento} quedó guardada en preparación.",
+        _ => null,
+    };
+
+    /// <summary>Página pedida a la API: lo último creado primero.</summary>
+    public static PageRequest Peticion(int pagina) => new(pagina, PageRequest.TamanoPorDefecto, "CreatedAtUtc", Descendente: true);
+
+    /// <summary>Carga la página (mínimo 1); si la pedida ya no existe, la última que haya.</summary>
+    public static async Task<(PagedResult<T> Resultado, int Pagina)> CargarAsync<T>(Func<PageRequest, Task<PagedResult<T>>> listar, int pagina)
+    {
+        pagina = Math.Max(pagina, 1);
+        var resultado = await listar(Peticion(pagina));
+        if (resultado.TotalPaginas > 0 && pagina > resultado.TotalPaginas)
+        {
+            pagina = resultado.TotalPaginas;
+            resultado = await listar(Peticion(pagina));
+        }
+
+        return (resultado, pagina);
+    }
+
+    /// <summary>URL de la lista (<see cref="RutasPreparacion.ListaFacturas"/> o <see cref="RutasPreparacion.ListaNotas"/>) con los filtros no vacíos, la página y <c>deleteId</c>.</summary>
+    public static string Url(string lista, IEnumerable<(string Clave, string? Valor)> filtros, int pagina, Guid? deleteId = null)
+    {
+        var url = lista;
+        foreach (var (clave, valor) in filtros)
+        {
+            if (Vacio(valor) is { } v)
+            {
+                url = RetornoLocal.ConParametro(url, clave, v);
+            }
+        }
+
+        if (pagina > 1) url = RetornoLocal.ConParametro(url, "pagina", pagina.ToString(CultureInfo.InvariantCulture));
+        if (deleteId is { } id) url = RetornoLocal.ConParametro(url, "deleteId", id.ToString());
+        return url;
+    }
+
+    /// <summary>
+    /// Descarta en la API: devuelve el destino (<paramref name="lista"/> con <c>ok=descartada</c>) o el mensaje y los errores reales.
+    /// La página navega FUERA de su try (R17).
+    /// </summary>
+    public static async Task<(string? Destino, string? Error, IReadOnlyList<string> Errores)> DescartarAsync(
+        Func<Task<VentaOperationResult<bool>>> borrar, string lista, ILogger logger, string errorGenerico)
+    {
+        try
+        {
+            var result = await borrar();
+            return result.Succeeded
+                ? (RetornoLocal.ConParametro(lista, "ok", "descartada"), null, [])
+                : (null, result.Message, result.Errors ?? []);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not discard a document en preparación.");
+            return (null, errorGenerico, []);
+        }
+    }
+
+    public static string? Vacio(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+}
+
+/// <summary>Formulario de "Descartar" de las listas en preparación (<c>delete-borrador</c> / <c>delete-borrador-nota</c>): solo el id.</summary>
+public sealed class DescartarDocumentoForm
+{
+    public Guid Id { get; set; }
 }

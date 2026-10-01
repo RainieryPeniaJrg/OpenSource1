@@ -55,7 +55,7 @@ public sealed class BusquedaApiTests : IClassFixture<PostgresTestFixture>
         var factura = Assert.Single(Grupo(resultado, TiposResultadoBusqueda.Facturas));
         Assert.Equal((numero, $"/facturas-venta/{numero}"), (factura.Titulo, factura.Ruta));
         var borradorItem = Assert.Single(Grupo(resultado, TiposResultadoBusqueda.BorradoresFactura));
-        Assert.StartsWith("/facturas-venta/borradores/", borradorItem.Ruta);
+        Assert.StartsWith("/facturas-venta/en-preparacion/", borradorItem.Ruta);
         Assert.Empty(Grupo(resultado, TiposResultadoBusqueda.NotasCredito));
         Assert.Empty(Grupo(resultado, TiposResultadoBusqueda.BorradoresNotaCredito));
     }

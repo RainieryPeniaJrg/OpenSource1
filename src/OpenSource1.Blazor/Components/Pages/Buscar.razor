@@ -140,9 +140,9 @@ else
             },
             TiposResultadoBusqueda.Productos => EsPalabraConDigitos(q) ? $"/productos?codigo={valor}&filters=codigo" : $"/productos?nombre={valor}",
             TiposResultadoBusqueda.Facturas => $"/facturas-venta?{CampoFactura(q)}={valor}",
-            TiposResultadoBusqueda.BorradoresFactura => $"/facturas-venta/borradores?{CampoFactura(q)}={valor}",
+            TiposResultadoBusqueda.BorradoresFactura => $"{RutasPreparacion.ListaFacturas}&{CampoFactura(q)}={valor}",
             TiposResultadoBusqueda.NotasCredito => $"/notas-credito-venta?numero={valor}",
-            TiposResultadoBusqueda.BorradoresNotaCredito => $"/notas-credito-venta/borradores?numero={valor}",
+            TiposResultadoBusqueda.BorradoresNotaCredito => $"{RutasPreparacion.ListaNotas}&numero={valor}",
             _ => $"/buscar?q={valor}",
         };
     }

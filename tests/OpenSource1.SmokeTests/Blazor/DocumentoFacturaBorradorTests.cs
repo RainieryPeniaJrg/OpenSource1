@@ -226,18 +226,6 @@ public sealed class DocumentoFacturaBorradorTests
     }
 
     [Fact]
-    public async Task Listado_FiltroPosteada()
-    {
-        using var app = Configurar(new BlazorSsrFactory());
-        var api = app.Simular<IFacturaVentaApiClient>();
-
-        var html = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/borradores?estado=3");
-
-        Assert.Contains("<option value=\"3\" selected", html);
-        api.Verify(c => c.ListBorradoresAsync(It.Is<FacturaVentaBorradorFiltro?>(f => f!.Estado == 3), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
-    }
-
-    [Fact]
     public async Task FalloAlCargarSeries_NoBloqueaGuardar_YConservaLaSerieActual()
     {
         // F7: el fallo de series no bloquea guardar; el selector del Administrador (en "Más opciones") rotula la serie actual "(actual)".

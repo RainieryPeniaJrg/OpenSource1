@@ -190,13 +190,15 @@ public sealed class InicioYGruposTests
         var html = await HtmlAsync(app.Cliente("Administrador"), "/modulos/facturacion");
 
         Assert.Contains("data-testid=\"indicadores-grupo\"", html);
-        Assert.Contains("Borradores abiertos", html);
+        Assert.Contains("Facturas en preparación", html);
         Assert.Contains(">7<", html);
         Assert.Contains(">2<", html);
-        Assert.Contains("Borradores de nota de crédito", html);
-        Assert.DoesNotContain("Facturas posteadas", html);
+        Assert.Contains("Notas de crédito en preparación", html);
+        Assert.DoesNotContain("Facturas registradas", html);
         Assert.Contains("href=\"/facturas-venta\"", html);
-        facturas.Verify(c => c.ListBorradoresAsync(It.Is<FacturaVentaBorradorFiltro?>(f => f != null && f.Estado == 1), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Contains("href=\"/facturas-venta?estado=preparacion\"", html);
+        // En preparación = Abierta + Liberada: sin filtro de estado.
+        facturas.Verify(c => c.ListBorradoresAsync(It.Is<FacturaVentaBorradorFiltro?>(f => f == null), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -223,7 +225,7 @@ public sealed class InicioYGruposTests
         var resultado = await indicadores.ObtenerAsync("facturacion", PermisosTestAuthHandler.Principal("Administrador"));
 
         Assert.True(reloj.Elapsed < TimeSpan.FromSeconds(5), $"Tardó {reloj.Elapsed}.");
-        Assert.Equal(["Facturas posteadas", "Borradores de nota de crédito"], resultado.Select(i => i.Titulo));
+        Assert.Equal(["Facturas registradas", "Notas de crédito en preparación"], resultado.Select(i => i.Titulo));
         Assert.True(Assert.Single(tokens).IsCancellationRequested);
     }
 

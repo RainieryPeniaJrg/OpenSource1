@@ -296,50 +296,37 @@ public sealed class AccionesFacturasTests
     }
 
     [Fact]
-    public async Task Borradores_ConNuevaFacturaYVerCliente()
+    public async Task EnPreparacion_ConNuevaFacturaYNuevaNota()
     {
         using var app = Configurar(new BlazorSsrFactory());
 
-        var facturas = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/borradores");
-        var notas = await HtmlSsr.HtmlAsync(app.Cliente(), "/notas-credito-venta/borradores");
+        var facturas = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta?estado=preparacion"));
+        var notas = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), "/notas-credito-venta?estado=preparacion"));
 
-        Assert.Contains("href=\"/facturas-venta/nueva?returnUrl=", facturas);
-        Assert.Contains("data-testid=\"menu-ver\"", facturas);
-        Assert.Contains("href=\"/notas-credito-venta/nueva", notas);
-        Assert.Contains("data-testid=\"menu-ver\"", notas);
+        Assert.Contains(">+ Nueva factura</a>", facturas);
+        Assert.Contains("href=\"/facturas-venta/nueva", facturas);
+        Assert.Contains("data-testid=\"tabla-en-preparacion\"", facturas);
+        Assert.Contains(">+ Nueva nota de crédito</a>", notas);
+        Assert.Contains("href=\"/notas-credito-venta/nueva\"", notas);
+        Assert.Contains("data-testid=\"tabla-en-preparacion\"", notas);
     }
 
+    /// <summary>
+    /// Spec alta rápida: una factura heredada Liberada se continúa (su página la reabre antes de modificarla) pero no se descarta desde
+    /// la lista; la abierta sí.
+    /// </summary>
     [Fact]
-    public async Task BorradoresFactura_Liberado_SeleccionableParaVer_SinEditarNiEliminar()
+    public async Task EnPreparacion_Liberada_SinDescartar()
     {
         using var app = Configurar(new BlazorSsrFactory());
 
-        var liberado = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/borradores?sel={IdBorradorLiberado}");
-        var abierto = await HtmlSsr.HtmlAsync(app.Cliente(), $"/facturas-venta/borradores?sel={IdBorradorAbierto}");
-        var sinSeleccion = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/borradores");
+        var html = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta?estado=preparacion"));
 
-        Assert.Contains($"href=\"/facturas-venta/borradores/{IdBorradorLiberado}\"", liberado);
-        Assert.Contains($"href=\"/clientes/{IdCliente}\"", liberado);
-        Assert.DoesNotContain("data-testid=\"accion-editar\"", liberado);
-        Assert.DoesNotContain("data-testid=\"accion-eliminar\"", liberado);
-
-        Assert.Contains($"<a data-testid=\"accion-editar\" href=\"/facturas-venta/borradores/{IdBorradorAbierto}?returnUrl=", abierto);
-        Assert.Contains($"href=\"/clientes/{IdCliente}\"", abierto);
-
-        Assert.Contains("<span data-testid=\"accion-editar\" aria-disabled=\"true\"", sinSeleccion);
-        Assert.Contains("<span data-testid=\"accion-eliminar\" aria-disabled=\"true\"", sinSeleccion);
-    }
-
-    [Fact]
-    public async Task BorradoresNota_SeleccionHabilitaVerCliente()
-    {
-        using var app = Configurar(new BlazorSsrFactory());
-
-        var html = await HtmlSsr.HtmlAsync(app.Cliente(), $"/notas-credito-venta/borradores?sel={IdNota}");
-
-        Assert.Contains($"href=\"/notas-credito-venta/borradores/{IdNota}\"", html);
-        Assert.Contains($"href=\"/clientes/{IdCliente}\"", html);
-        Assert.Contains("href=\"/notas-credito-venta/nueva?returnUrl=", html);
+        Assert.Contains($"href=\"/facturas-venta/en-preparacion/{IdBorradorLiberado}\"", html);
+        Assert.Contains($"href=\"/facturas-venta/en-preparacion/{IdBorradorAbierto}\"", html);
+        Assert.Contains(">Continuar</a>", html);
+        Assert.DoesNotContain($"deleteId={IdBorradorLiberado}", html);
+        Assert.Contains($"deleteId={IdBorradorAbierto}", html);
     }
 
     [Fact]

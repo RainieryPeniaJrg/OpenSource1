@@ -113,10 +113,10 @@ public sealed class BuscarPaginaTests
     [InlineData(TiposResultadoBusqueda.Facturas, "FV01", "/facturas-venta?nombre=FV01")]
     [InlineData(TiposResultadoBusqueda.Facturas, "Tienda 24", "/facturas-venta?nombre=Tienda%2024")]
     [InlineData(TiposResultadoBusqueda.Facturas, "comercial", "/facturas-venta?nombre=comercial")]
-    [InlineData(TiposResultadoBusqueda.BorradoresFactura, "0001", "/facturas-venta/borradores?numero=0001")]
-    [InlineData(TiposResultadoBusqueda.BorradoresFactura, "B 1", "/facturas-venta/borradores?nombre=B%201")]
+    [InlineData(TiposResultadoBusqueda.BorradoresFactura, "0001", "/facturas-venta?estado=preparacion&numero=0001")]
+    [InlineData(TiposResultadoBusqueda.BorradoresFactura, "B 1", "/facturas-venta?estado=preparacion&nombre=B%201")]
     [InlineData(TiposResultadoBusqueda.NotasCredito, "NC", "/notas-credito-venta?numero=NC")]
-    [InlineData(TiposResultadoBusqueda.BorradoresNotaCredito, "NC", "/notas-credito-venta/borradores?numero=NC")]
+    [InlineData(TiposResultadoBusqueda.BorradoresNotaCredito, "NC", "/notas-credito-venta?estado=preparacion&numero=NC")]
     public void VerTodosUrl_ApuntaAlListadoFiltrado(string tipo, string q, string esperado)
     {
         Assert.Equal(esperado, Buscar.VerTodosUrl(tipo, q));

@@ -17,7 +17,12 @@ namespace OpenSource1.SmokeTests.Blazor;
 /// </summary>
 public sealed class RegistroModulosTests
 {
-    private static readonly string[] RutasFueraDelRegistro = ["/", "/buscar", "/Error", "/not-found", "/access-denied"];
+    private static readonly string[] RutasFueraDelRegistro =
+    [
+        "/", "/buscar", "/Error", "/not-found", "/access-denied",
+        // Listas antiguas de borradores: redirigen a la pestaña En preparación (spec alta rápida).
+        "/facturas-venta/borradores", "/notas-credito-venta/borradores",
+    ];
 
     [Fact]
     public void CadaListadoTieneModulo_YCadaRutaDelRegistroExiste()
@@ -97,7 +102,7 @@ public sealed class RegistroModulosTests
     }
 
     [Theory]
-    [InlineData("facturas-venta/borradores/3f2b8c1e-0000-0000-0000-000000000001", "borradores-factura")]
+    [InlineData("facturas-venta/borradores/3f2b8c1e-0000-0000-0000-000000000001", "facturas")]
     [InlineData("/facturas-venta/FV000001", "facturas")]
     [InlineData("/contabilidad/movimientos", "movimientos-contables")]
     [InlineData("/contabilidad", "costo-inventario")]
@@ -109,14 +114,16 @@ public sealed class RegistroModulosTests
     }
 
     /// <summary>
-    /// Puerta C: las páginas de alta y edición marcan el módulo de su listado; las altas de documentos (factura y nota de
-    /// crédito) marcan los borradores, que es donde se crean, no el listado de documentos posteados.
+    /// Puerta C: las páginas de alta y edición marcan el módulo de su listado; las altas y las páginas en preparación marcan el
+    /// módulo de su documento (spec alta rápida: Facturación tiene dos entradas, Facturas y Notas de crédito).
     /// </summary>
     [Theory]
-    [InlineData("/notas-credito-venta/nueva", "borradores-nota-credito")]
-    [InlineData("/notas-credito-venta/nueva?socioId=3f2b8c1e-0000-0000-0000-000000000001", "borradores-nota-credito")]
-    [InlineData("/facturas-venta/nueva", "borradores-factura")]
-    [InlineData("/facturas-venta/nueva/?socioId=3f2b8c1e-0000-0000-0000-000000000001", "borradores-factura")]
+    [InlineData("/notas-credito-venta/nueva", "notas-credito")]
+    [InlineData("/notas-credito-venta/nueva?socioId=3f2b8c1e-0000-0000-0000-000000000001", "notas-credito")]
+    [InlineData("/facturas-venta/nueva", "facturas")]
+    [InlineData("/facturas-venta/nueva/?socioId=3f2b8c1e-0000-0000-0000-000000000001", "facturas")]
+    [InlineData("/facturas-venta/en-preparacion/3f2b8c1e-0000-0000-0000-000000000001", "facturas")]
+    [InlineData("/notas-credito-venta/en-preparacion/3f2b8c1e-0000-0000-0000-000000000001", "notas-credito")]
     [InlineData("/notas-credito-venta/NC000001", "notas-credito")]
     [InlineData("/facturas-venta/nuevax", "facturas")]
     [InlineData("/cobros/nuevo?socioId=3f2b8c1e-0000-0000-0000-000000000001", "cobros")]
@@ -134,8 +141,8 @@ public sealed class RegistroModulosTests
     [InlineData("/setups-contables/nuevo", "setups-contables")]
     [InlineData("/admin/users/nuevo", "usuarios")]
     [InlineData("/admin/users/abc/editar", "usuarios")]
-    [InlineData("/facturas-venta/borradores/3f2b8c1e-0000-0000-0000-000000000001/editar", "borradores-factura")]
-    [InlineData("/notas-credito-venta/borradores/3f2b8c1e-0000-0000-0000-000000000001/editar", "borradores-nota-credito")]
+    [InlineData("/facturas-venta/borradores/3f2b8c1e-0000-0000-0000-000000000001/editar", "facturas")]
+    [InlineData("/notas-credito-venta/borradores/3f2b8c1e-0000-0000-0000-000000000001/editar", "notas-credito")]
     [InlineData("/series/nueva", "series-numeracion")]
     [InlineData("/series/3f2b8c1e-0000-0000-0000-000000000001", "series-numeracion")]
     [InlineData("/configuracion/numeracion", "configuracion-numeracion")]
@@ -171,6 +178,17 @@ public sealed class RegistroModulosTests
     public void ModuloDeRuta_SinCoincidencia_EsNull(string? ruta)
     {
         Assert.Null(Registro().ModuloDeRuta(ruta));
+    }
+
+    [Fact]
+    public void Facturacion_DosEntradas_YLasPalabrasClaveDeLaPreparacion()
+    {
+        var facturacion = CatalogoModulos.Modulos.Where(m => m.Grupo == "facturacion").Select(m => m.Clave).ToList();
+
+        Assert.Equal(["facturas", "notas-credito"], facturacion);
+        Assert.Equal(["facturas", "notas-credito"], TextoBusqueda.FiltrarModulos(CatalogoModulos.Modulos, "borrador").Select(m => m.Clave).Order());
+        Assert.Equal(["facturas", "notas-credito"], TextoBusqueda.FiltrarModulos(CatalogoModulos.Modulos, "en preparación").Select(m => m.Clave).Order());
+        Assert.Empty(CatalogoModulos.RutasAsociadas);
     }
 
     [Fact]
