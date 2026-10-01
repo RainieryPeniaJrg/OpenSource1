@@ -148,3 +148,7 @@ validado).
 - Cambiar el motor de posteo, la numeración o el esquema.
 - Renombrar entidades o endpoints internos.
 - Registrar una nota de crédito total sin pasar por el editor.
+
+## Resultado
+
+La rama `feat/alta-rapida-documentos` entregó el alta rápida de facturas y notas de crédito tal como se especificó: factura en una sola página que se crea con su primera línea en una transacción, documentos "En preparación" con registro confirmado, descarte y "Guardar para después", nota de crédito creada desde la factura registrada con sus líneas pendientes, series y almacén fijados por la configuración (solo el Administrador cambia la serie de registro), menú de Facturación con dos entradas y pestañas "Registradas" / "En preparación (n)", y resumen de errores accesible. Sin migraciones ni cambios en el motor de posteo ni en la numeración. Suite xUnit de 2114 tests en verde con 0 avisos y E2E 06, 09 y 10 en verde. El detalle (commits, decisiones, revisión final y residuales) está en la sección "Resultado de feat/alta-rapida-documentos" del plan: `docs/superpowers/plans/2026-10-01-alta-rapida-documentos.md`.

@@ -13,7 +13,7 @@ El sistema cubre la gestión empresarial de una empresa comercial pequeña:
 - Autenticación de usuarios, roles y permisos validados en la API.
 - Maestros de clientes, productos, almacenes y catálogos auxiliares.
 - Inventario con diarios de ajuste y transferencia, existencias y libros de cantidad y de costo.
-- Facturación de ventas con borradores, facturas posteadas, notas de crédito y cobros.
+- Facturación de ventas con alta rápida (cliente, datos derivados y primera línea en una página), documentos en preparación que se guardan solos, registro con confirmación, notas de crédito desde la factura y cobros.
 - Cuentas por cobrar (libro de clientes y estado de cuenta).
 - Contabilidad: plan de cuentas, setups contables, movimientos, balance de comprobación y costo de inventario.
 - Series de numeración configurables por tipo de documento, sin huecos.
@@ -66,7 +66,7 @@ El menú lateral y el inicio se generan desde un registro único de módulos (`s
 | Productos | Productos (`/productos`), categorías de producto, panel de productos |
 | Inventario | Existencias, almacenes, diarios de inventario, movimientos de producto y de valor |
 | Ventas | Cobros, movimientos de cliente, estado de cuenta (CxC) |
-| Facturación | Borradores de factura, facturas, borradores de nota de crédito, notas de crédito |
+| Facturación | Facturas y notas de crédito (registradas y en preparación) |
 | Contabilidad | Plan de cuentas, movimientos contables, balance de comprobación, costo de inventario |
 | Reportes | Reportería PDF/Excel, bitácora |
 | Configuración | Términos de pago, unidades de medida, grupos contables, grupos de cliente contable, setups contables, fechas de registro, series de numeración, configuración de numeración |
@@ -348,6 +348,20 @@ Las funcionalidades se desarrollan en ramas `feat/*` y se integran por PR. El re
 - **Entregable final, Parte 1:** [`docs/entregable-parte-1/`](docs/entregable-parte-1/) (documento técnico `.docx`, presentación `.pptx`, guion de demostración, diagramas, capturas y reporte E2E). Se regeneran con `npm run diagramas` y `npm run entregable` en `tests/e2e`.
 
 ## Changelog
+
+### Versión 0.6 — Alta rápida de facturas y notas de crédito
+
+Alta rápida de facturas y notas de crédito (rama `feat/alta-rapida-documentos`).
+
+Incluye:
+
+- Factura en una sola página (`/facturas-venta/nueva`): cliente con búsqueda y "Usar", datos derivados en solo lectura, numeración informativa y la primera línea; el documento se crea con esa línea en una transacción y queda "En preparación" (`/facturas-venta/en-preparacion/{id}`).
+- "Registrar factura" con confirmación (total, líneas, serie y próximo número), "Guardar para después" y "Descartar factura"; sin Liberar/Reabrir en la UI.
+- Nota de crédito desde la factura registrada con "Crear nota de crédito": todas las líneas pendientes y la devolución al inventario; se ajusta en `/notas-credito-venta/en-preparacion/{id}` y se registra con confirmación.
+- Series fijas por la configuración (la de registro solo la cambia el Administrador) y almacén fijo en el predeterminado; la API rechaza lo demás (`serie.no_editable`, `almacen.no_editable`).
+- Facturación con 2 entradas de menú y pestañas "Registradas" / "En preparación (n)"; las rutas antiguas de borradores redirigen.
+- Accesibilidad: datos en solo lectura en `<dl>`, resumen de errores con `role="alert"` enfocado tras la navegación mejorada, nombres accesibles en las acciones de fila.
+- Suite xUnit ampliada a 2114 tests (0 avisos) y E2E `10-alta-rapida`.
 
 ### Versión 0.5 — Series de numeración y documento único
 

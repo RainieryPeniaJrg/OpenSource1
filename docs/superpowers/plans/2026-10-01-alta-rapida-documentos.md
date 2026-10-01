@@ -5456,3 +5456,82 @@ git commit -m "docs: resultado y cierre de la rama de alta rapida de documentos"
 | Blazor: rutas, redirecciones, listas, menú, reglas Static SSR | R6, R7, R8, G2 |
 | Pruebas: handlers, API 400/403/409, páginas SSR, tests existentes actualizados, E2E 09 y 10, puerta de cierre | R1–R4, R5–R8, R9, G1, G2, R10 |
 | Fuera de alcance | Global Constraints |
+
+## Resultado de feat/alta-rapida-documentos
+
+### Commits (`git log --oneline f79a44a..HEAD`)
+
+```
+31bfa72 fix: continuar la nota de credito en preparacion existente, serie aplicada en la numeracion del alta y textos registrada
+c5f834e fix: resumen de errores con la validacion del formulario y serie de registro visible en el alta para el administrador
+d2a0143 test: e2e del alta rapida de factura y nota de credito
+6cbdc85 fix: filtro numero en notas en preparacion, mensaje de descarte en registradas y subtitulo registrado
+bc80f42 feat: facturacion con dos entradas y pestanas registradas y en preparacion
+ea6ba8a fix: total de la nota de credito en preparacion sin el calificativo de vista previa
+7a16a37 feat: nota de credito desde la factura registrada y nota en preparacion con registrar y descartar
+80cbcb2 fix: validacion de fechas compartida y registrar deshabilitado con motivo en la factura liberada
+305751a feat: alta rapida de factura y factura en preparacion con registrar, guardar para despues y descartar
+89ac1a6 feat: componentes del documento en preparacion: datos derivados, numeracion, confirmacion y resumen de errores
+3fb0cd0 feat: conteo y total de los documentos en preparacion y codigos de grupos del borrador
+d60b907 feat: nota de credito desde la factura con las lineas pendientes y la devolucion por defecto
+7a65568 feat: alta de factura con primera linea en una transaccion y almacen predeterminado fijo
+7c1d6d7 feat: series fijas por configuracion y solo el administrador cambia la de registro
+5f40708 docs: plan de implementación del alta rápida de facturas y notas de crédito
+f88ae33 docs: README actualizado con los módulos ERP, configuración, pruebas y changelog 0.5
+```
+
+### Verificación final
+
+- `dotnet build test.slnx -warnaserror`: 0 avisos, 0 errores.
+- Suite completa: 2114 tests, 0 fallos (partida: 2004).
+- `has-pending-model-changes`: sin cambios de modelo.
+- Sin `@rendermode`/`@onclick`/`@bind` añadidos; sin cambios en `appsettings*.json`, migraciones, `ApplicationDbContext.cs`, motores de posteo ni generador de números.
+- Stack reconstruido desde HEAD y E2E 06, 09 y 10: 7 de 7 pruebas verdes. Cargas de página medidas por el E2E 10: factura de 2 líneas 8, nota de crédito total 3.
+
+### Revisión final
+
+Veredicto "merge after one fix": 0 Critical, 1 Important (nota de crédito duplicada al repetir el POST de `crear-nota`). Corregido en 31bfa72 junto con los minors (la línea de numeración del administrador usa la serie aplicada y la ayuda "aplicar primero"; textos residuales "posteada/borrador" en la UI; sin número de borrador en la tabla de notas de la factura; tests del POST de descarte de la nota). Re-revisión limpia.
+
+### Decisiones tomadas durante la ejecución
+
+- README actualizado en f88ae33 antes de R1: era el cambio pedido por el usuario, no ajeno; el paso 1 de R10 se reescribió.
+- PF1 (R7): el botón "Crear nota de crédito" de la barra solo se muestra si no hay `CrearNota`, para que exista un único formulario `crear-nota` (FormName duplicado rompe Blazor).
+- PF2 (R6/R7): se extrajeron `BotonesPreparacion.razor` y `RutasPreparacion.DestinoTrasGuardar` y R7 los reutiliza.
+- PF3 (R8): se mantienen dos componentes de lista; helpers compartidos en `DocumentoVistas.cs`.
+- PF4 (R6): "Volver a editar" solo para documentos Liberada heredados (nunca "Liberar", nunca para Abierta); de lo contrario no podrían editarse ni descartarse.
+- PF5: se descartó la aserción trivial de `AltaInput.AlmacenId`.
+- PF6 (R8): los formularios `delete-borrador`/`delete-borrador-nota` se renderizan vacíos en modo lista.
+- PF7: cuatro handlers inyectan `IUsuarioActual`; `AgregarAsync` es público estático (solo texto).
+- PF8/PF9/PF10: AR17 obsoleto (README ya commiteado); el aviso de "sin serie" aplica solo a facturas salvo que R7 lo añada; `SerieApiClientTests` no requiere cambios.
+- PF11: copiar a preparación conserva el almacén de la factura (NS13); desviación aceptada respecto de "siempre el predeterminado".
+- La columna "Líneas" cuenta `NumeroLineas` incluidas líneas de comentario (semántica previa).
+- R6-I1: helper de fechas compartido entre `AltaFacturaForm` y `BorradorForm` en lugar de la copia del plan.
+- R6-m3: "Registrar factura" de una Liberada aplica `MotivoNoRegistrable` (deshabilitado con motivo).
+- R8: la columna de la nota se rotula "Total estimado" con nota (`ImporteTotal` sin topes), por honestidad sobre el total.
+- R8-I1: filtro `Numero` en `ListaNotasEnPreparacion` y número conservado en la redirección (el texto del plan causaba regresión).
+- R8-m1/m2: mensaje de descarte visible en la pestaña Registradas y "Documento legal posteado" cambiado a "registrado".
+- G2 paso 3: el recorrido en navegador se delegó al E2E de R9 (Playwright MCP no disponible).
+- R9-C1: los errores de validación del formulario alimentan `ResumenErrores` y reciben foco (`OnInvalidSubmit` en factura nueva, en preparación y nota); se invirtió el `test.fail` del spec 10.
+- R9-C3: "Más opciones → Cambiar serie de registro" visible para el administrador en `/facturas-venta/nueva` sin depender del tipo de línea.
+- Ola final: Important #1 y minors #1, #2, #3 (número de borrador oculto solo en la tabla de notas de la factura) y el test del POST de descarte de la nota; el resto queda según el triaje del revisor.
+
+### Residuales aceptados
+
+- Guarda de nota duplicada solo en la UI: dos POST realmente simultáneos podrían crear dos notas; se recomienda para una rama posterior una regla en servidor de "una nota de crédito abierta por factura".
+- R1: los resúmenes de comandos `Update` mencionan `SerieBorradorId` sin que exista el campo (texto del plan); sin test de API para las reglas de serie de la nota (solo a nivel de handler).
+- R2: `Reglas` depende de la constante del handler `MaximoLineasPorBorrador`; mapeo de línea a DTO repetido en `FacturasVentaController`; caso sin almacén predeterminado + `AlmacenId` (`factura.almacen_invalido`) sin test.
+- R3: `CoherenciaVistasApiTests` editado fuera de la lista del brief (necesario); test de alta entre helpers (cosmético).
+- R4: el test de conteo no prueba que Posteada quede excluida; códigos de grupo vía subconsultas escalares; el SQL agrupa por (Identificador, Porcentaje) frente al calculador por identificador (inalcanzable); el `ImporteTotal` de la nota ignora `TopesNotaCredito` (por eso se rotula "estimado").
+- R5: `Href` de datos derivados sin verificar esquema (solo rutas internas); `LineaDelMensaje` en `NumeracionDocumento`; `MotivoBloqueo` sin series de borrador inactivas en tests; test de `AppErrores` basado en texto fuente; dos aserciones de página debilitadas a "próximo <strong>"; `app.errores.js` enfoca solo el primer resumen.
+- R6: el mensaje de éxito añade total/asiento tras "Factura X registrada."; marcado de fecha/descripción de Nueva copia `CabeceraFacturaFields`; `ErroresPosteo` mezcla un mensaje ajeno de la página.
+- R7: el texto de `aviso-importes` sugiere que la vista previa no resta créditos previos; `AltaRapidaNotaTests` sin comprobar el destino de "Guardar para después" ni total/serie de la confirmación; frase extra en el subtítulo de Nueva; etiqueta "Quitar línea" (nota) frente a "Eliminar línea" (factura).
+- R8: el filtro de preparación ofrece Número interno no mostrado en la tabla (mandato del brief); Crear▾/Ver▾ deshabilitados en la pestaña de preparación; mensaje de log de descarte genérico; CSS de pestañas sin variantes `dark:`; una ejecución Postgres sin `flock` (inocua).
+- R9: duplicación de wrappers `ErroresDelFormulario`/`ErroresDeLaLinea` y del helper `Resumen` de tests; sin test SSR de no administrador con `?serieRegistroId`; el E2E de foco depende de clientes existentes; la comprobación de supervisor sin "Más opciones" solo en la página de preparación.
+
+### Datos que dejó el E2E en la base de desarrollo
+
+Documentos registrados (clientes "E2E Alta …"): facturas 00000003, 00000004, 00000005, 00000006 y 00000007 (esta última de la repetición de R10); notas de crédito 00000002, 00000003, 00000004, 00000005 y 00000006 (esta última de la repetición de R10).
+
+### Entorno
+
+- El `nodejs` del sistema está roto (falta `libsimdjson.so.33`); el E2E se ejecuta con un `node` alternativo al inicio del `PATH`.
