@@ -15,6 +15,7 @@
                 <label class="mb-1 block text-sm font-medium text-slate-700" for="@Id">Cambiar serie de registro</label>
                 <SelectorSerie Id="@Id" Name="@Name" Series="@Series" Seleccion="@Seleccion" VigenteId="@VigenteId" VigenteCodigo="@Codigo"
                                OpcionConfigurada="@(VigenteId is null)" CargaFallida="@CargaFallida" />
+                @ChildContent
             </div>
         </details>
     }
@@ -35,4 +36,6 @@
     /// <summary>Serie guardada en el documento (null en el alta: la opción vacía "— La configurada —").</summary>
     [Parameter] public Guid? VigenteId { get; set; }
     [Parameter] public bool CargaFallida { get; set; }
+    /// <summary>Contenido extra bajo el selector (p. ej. el botón "Aplicar" cuando el selector va en un formulario GET).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
 }

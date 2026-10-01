@@ -7,6 +7,7 @@ using OpenSource1.Application.Features.ConfiguracionNumeracion.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Calculo;
 using OpenSource1.Application.Features.FacturasVenta.Posteo;
+using OpenSource1.Application.Features.Productos.Dtos;
 using OpenSource1.Application.Features.Series.Dtos;
 using OpenSource1.Application.Features.SociosNegocio.Dtos;
 using OpenSource1.Core.Common;
@@ -28,6 +29,8 @@ public sealed class AltaRapidaFacturaTests
     private static readonly Guid IdSerieFv = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006a4");
     private static readonly Guid IdSerieOtra = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006a5");
     private static readonly Guid IdNuevo = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006a6");
+    private static readonly Guid IdLinea = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006a7");
+    private static readonly Guid IdProducto = Guid.Parse("7d0c9a51-0000-0000-0000-0000000006a8");
     private const string Nueva = "/facturas-venta/nueva";
     private static string Url(Guid id) => $"/facturas-venta/en-preparacion/{id}";
 
@@ -226,6 +229,124 @@ public sealed class AltaRapidaFacturaTests
             i.SerieBorradorId == null && i.AlmacenId == null && i.SocioNegocioId == IdSocio && i.PrimeraLinea == null), 11, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // ----- Follow-up R9: errores de validación del formulario en el resumen (R9-C1) y "Más opciones" siempre visible (R9-C3) -----
+
+    private const string PrecioObligatorio = "El precio unitario es obligatorio (para regalar, use 100 % de descuento).";
+
+    [Fact]
+    public async Task Nueva_PrecioVacio_ResumenDeErroresConElMensaje_SinLlamarALaApi()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+        var api = app.Simular<IFacturaVentaApiClient>();
+
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Nueva}?socioId={IdSocio}&tipo=1&addProductoId={IdProducto}", "alta-factura",
+            new Dictionary<string, string>
+            {
+                ["AltaInput.SocioNegocioId"] = IdSocio.ToString(), ["AltaInput.Tipo"] = "1", ["AltaInput.CantidadTexto"] = "1", ["AltaInput.PrecioUnitarioTexto"] = "",
+            });
+        var html = HtmlSsr.Decodificar(await respuesta.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+        var resumen = Resumen(html);
+        Assert.Contains("role=\"alert\"", resumen);
+        Assert.Contains($"<li>{PrecioObligatorio}</li>", resumen);
+        Assert.Equal(1, Ocurrencias(html, "data-testid=\"resumen-errores\""));
+        api.Verify(c => c.CreateBorradorAsync(It.IsAny<BorradorCabeceraInput>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EnPreparacion_AgregarLineaConPrecioVacio_ResumenDeErrores()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdBorrador)}?tipo=1&addProductoId={IdProducto}", "add-linea",
+            new Dictionary<string, string> { ["AddInput.Tipo"] = "1", ["AddInput.CantidadTexto"] = "1", ["AddInput.PrecioUnitarioTexto"] = "" });
+        var html = HtmlSsr.Decodificar(await respuesta.Content.ReadAsStringAsync());
+
+        var resumen = Resumen(html);
+        Assert.Contains("role=\"alert\"", resumen);
+        Assert.Contains($"<li>{PrecioObligatorio}</li>", resumen);
+        Assert.Equal(1, Ocurrencias(html, "data-testid=\"resumen-errores\""));
+    }
+
+    [Fact]
+    public async Task EnPreparacion_ModificarLineaInvalida_ResumenConEnlaceALaFila()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdBorrador)}?editLineaId={IdLinea}", "update-linea",
+            new Dictionary<string, string> { ["UpdateInputLinea.Tipo"] = "3", ["UpdateInputLinea.Descripcion"] = "", ["UpdateInputLinea.Xmin"] = "3" });
+        var html = HtmlSsr.Decodificar(await respuesta.Content.ReadAsStringAsync());
+
+        var resumen = Resumen(html);
+        Assert.Contains("<a class=\"underline\" href=\"#linea-10000\">Línea 10000: La línea de comentario requiere una descripción.</a>", resumen);
+        Assert.Contains("id=\"linea-10000\" data-testid=\"fila-edicion\"", html);
+    }
+
+    [Fact]
+    public async Task EnPreparacion_CabeceraSinFechaDeRegistro_ResumenDeErrores()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+        var campos = new Dictionary<string, string>(Cabecera("")) { ["UpdateInput.FechaRegistroTexto"] = "" };
+
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), Url(IdBorrador), "guardar-cabecera", campos);
+        var html = HtmlSsr.Decodificar(await respuesta.Content.ReadAsStringAsync());
+
+        Assert.Contains("<li>La fecha de registro es obligatoria al modificar.</li>", Resumen(html));
+    }
+
+    [Theory]
+    [InlineData("tipo=1")]
+    [InlineData("tipo=1&addProductoQuery=uno")]
+    [InlineData("tipo=2")]
+    [InlineData("tipo=3")]
+    public async Task Nueva_MasOpciones_SoloElAdministrador_EnCualquierTipoDeLinea(string query)
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+
+        var administrador = await HtmlSsr.HtmlAsync(app.Cliente(), $"{Nueva}?socioId={IdSocio}&{query}");
+        var ejecutor = await HtmlSsr.HtmlAsync(app.Cliente("Ejecutor"), $"{Nueva}?socioId={IdSocio}&{query}");
+
+        Assert.Contains("data-testid=\"mas-opciones\"", administrador);
+        Assert.Contains("name=\"serieRegistroId\"", administrador);
+        Assert.DoesNotContain("data-testid=\"mas-opciones\"", ejecutor);
+        Assert.DoesNotContain("serieRegistroId", ejecutor);
+    }
+
+    [Fact]
+    public async Task Nueva_SerieElegida_ViajaEnLosEnlacesYEnElAlta_SoloParaElAdministrador()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+        var api = app.Simular<IFacturaVentaApiClient>();
+        api.Setup(c => c.CreateBorradorAsync(It.IsAny<BorradorCabeceraInput>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new VentaOperationResult<FacturaVentaBorradorResponse>(true, "ok", new FacturaVentaBorradorResponse { Id = IdNuevo }));
+        var ruta = $"{Nueva}?socioId={IdSocio}&tipo=3&serieRegistroId={IdSerieOtra}";
+
+        var administrador = await HtmlSsr.HtmlAsync(app.Cliente(), ruta);
+        var ejecutor = await HtmlSsr.HtmlAsync(app.Cliente("Ejecutor"), ruta);
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), ruta, "alta-factura", new Dictionary<string, string>
+        {
+            ["AltaInput.SocioNegocioId"] = IdSocio.ToString(), ["AltaInput.Tipo"] = "3", ["AltaInput.Descripcion"] = "Servicio",
+            ["AltaInput.SerieRegistroId"] = IdSerieOtra.ToString(),
+        });
+
+        Assert.Contains($"<input type=\"hidden\" name=\"AltaInput.SerieRegistroId\" value=\"{IdSerieOtra}\"", administrador);
+        Assert.Contains($"<option value=\"{IdSerieOtra}\" selected", administrador);
+        Assert.Contains($"href=\"{Nueva}?socioId={IdSocio}&tipo=1&serieRegistroId={IdSerieOtra}\"", administrador);
+        Assert.DoesNotContain("serieRegistroId", ejecutor.Replace(ruta, string.Empty, StringComparison.Ordinal));
+        Assert.DoesNotContain("name=\"AltaInput.SerieRegistroId\"", ejecutor);
+        Assert.Equal($"{Url(IdNuevo)}?tipo=3&ok=linea_creada", FormulariosSsr.Destino(respuesta));
+        api.Verify(c => c.CreateBorradorAsync(It.Is<BorradorCabeceraInput>(i => i.SerieRegistroId == IdSerieOtra), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private static string Resumen(string html)
+    {
+        var inicio = html.IndexOf("data-testid=\"resumen-errores\"", StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "Sin resumen de errores.");
+        var fin = html.IndexOf("</div>", inicio, StringComparison.Ordinal);
+        return html[html.LastIndexOf('<', inicio)..fin];
+    }
+
     private static int Ocurrencias(string html, string texto)
     {
         var total = 0;
@@ -398,7 +519,7 @@ public sealed class AltaRapidaFacturaTests
         [
             new LineaFacturaVentaBorradorResponse
             {
-                Id = Guid.NewGuid(), NumeroLinea = 10000, Tipo = TipoLineaFactura.Comentario, Descripcion = "Servicio", Xmin = 3,
+                Id = IdLinea, NumeroLinea = 10000, Tipo = TipoLineaFactura.Comentario, Descripcion = "Servicio", Xmin = 3,
             },
         ]);
         facturas.Setup(c => c.GetTotalesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -431,6 +552,9 @@ public sealed class AltaRapidaFacturaTests
         socios.Setup(c => c.GetByIdAsync(IdSocio, It.IsAny<CancellationToken>())).ReturnsAsync(socio);
         socios.Setup(c => c.ListAsync(It.IsAny<SocioNegocioSearchFilter?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PagedResult<SocioNegocioResponse>([socio], 1, 50, 1));
+        app.Simular<IProductoApiClient>()
+            .Setup(c => c.GetByIdAsync(IdProducto, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ProductoResponse { Id = IdProducto, Codigo = "P-1", Nombre = "Producto uno", PrecioVenta = 10m, UnidadMedidaBaseId = Guid.NewGuid() });
         app.Simular<IAlmacenApiClient>()
             .Setup(c => c.ListAsync(It.IsAny<AlmacenSearchFilter?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PagedResult<AlmacenResponse>([new AlmacenResponse { Id = Guid.NewGuid(), Codigo = "PRINC", Nombre = "Principal", EsPredeterminado = true }], 1, 50, 1));

@@ -109,7 +109,7 @@ else
     }
 
     <!-- ── Cabecera ── -->
-    <DocumentoCabeceraEditable Model="UpdateInput" FormName="guardar-cabecera" OnValidSubmit="GuardarCabeceraAsync"
+    <DocumentoCabeceraEditable Model="UpdateInput" FormName="guardar-cabecera" OnValidSubmit="GuardarCabeceraAsync" OnInvalidSubmit="ErroresDelFormulario"
                                Mostrar="MuestraFormCabecera" CargaFallida="false" Botones="@BotonesCabecera">
         <input type="hidden" name="UpdateInput.Xmin" value="@UpdateInput!.Xmin" />
         <DatosDerivados Datos="@DatosCliente" DetallesContables="@DetallesContables" />
@@ -162,7 +162,7 @@ else
                         {
                             if (EditaLineaEnFila && EditLineaId == l.Id)
                             {
-                                <DocumentoFilaFormulario @key="l.Id" Variante="VarianteFilaFormulario.Edicion" Columnas="@ColumnasTabla">
+                                <DocumentoFilaFormulario @key="l.Id" Id="@($"linea-{l.NumeroLinea}")" Variante="VarianteFilaFormulario.Edicion" Columnas="@ColumnasTabla">
                                     @ContenidoEdicionLinea
                                 </DocumentoFilaFormulario>
                                 continue;
@@ -716,7 +716,7 @@ else
                     <a href="@BuildUrl(tipo: 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cambiar producto</a>
                 </div>
             }
-            <EditForm Model="AddInput" FormName="add-linea" OnValidSubmit="CreateLineaAsync" Enhance="true">
+            <EditForm Model="AddInput" FormName="add-linea" OnValidSubmit="CreateLineaAsync" OnInvalidSubmit="ErroresDelFormulario" Enhance="true">
                 <DataAnnotationsValidator />
                 <LineaFacturaCampos Model="AddInput!" Prefix="AddInput" Tipo="@AddTipo" Almacenes="@almacenes.Items" Cuentas="@cuentas.Items"
                                     GruposIva="@gruposIva.Items" AlmacenCabeceraCodigo="@borrador!.AlmacenCodigo" OpcionesFallidas="@OpcionesFallidas(AddTipo)" />
@@ -761,7 +761,7 @@ else
                     <a href="@BuildUrl(editLineaId: EditLineaId, editBuscar: true)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cambiar producto</a>
                 </div>
             }
-            <EditForm Model="UpdateInputLinea" FormName="update-linea" OnValidSubmit="UpdateLineaAsync" Enhance="true">
+            <EditForm Model="UpdateInputLinea" FormName="update-linea" OnValidSubmit="UpdateLineaAsync" OnInvalidSubmit="ErroresDeLaLinea" Enhance="true">
                 <DataAnnotationsValidator />
                 <input type="hidden" name="UpdateInputLinea.Xmin" value="@UpdateInputLinea!.Xmin" />
                 <LineaFacturaCampos Model="UpdateInputLinea" Prefix="UpdateInputLinea" Tipo="@lineaAEditar.Tipo" Vigente="@lineaAEditar" Almacenes="@almacenes.Items"
@@ -1035,6 +1035,13 @@ else
             <input type="hidden" name="returnUrl" value="@Volver" />
         }
     };
+
+    /// <summary>R9-C1: envío inválido de la cabecera o de la fila de alta → el ResumenErrores único de la página (enfocado por app.errores.js).</summary>
+    private void ErroresDelFormulario(EditContext contexto) => Show("warning", ErroresFormulario.Mensaje, ErroresFormulario.Desde(contexto));
+
+    /// <summary>Como <see cref="ErroresDelFormulario"/>, con "Línea N: " para enlazar a la fila en edición (#linea-N).</summary>
+    private void ErroresDeLaLinea(EditContext contexto) =>
+        Show("warning", ErroresFormulario.Mensaje, ErroresFormulario.Desde(contexto, lineaAEditar?.NumeroLinea));
 
     private static string Cantidad(decimal valor) => valor.ToString("0.######", CultureInfo.InvariantCulture);
 

@@ -1,6 +1,6 @@
 @* Fila de la tabla de líneas que contiene el formulario de alta o de edición de una línea (NS17): una única celda que ocupa todas las
    columnas; el EditForm va DENTRO de la celda (HTML válido, sin formularios anidados ni atributo form=). *@
-<tr data-testid="@(Variante == VarianteFilaFormulario.Alta ? "fila-nueva" : "fila-edicion")">
+<tr id="@Id" data-testid="@(Variante == VarianteFilaFormulario.Alta ? "fila-nueva" : "fila-edicion")">
     <td colspan="@Columnas" class="px-4 py-4 @(Variante == VarianteFilaFormulario.Alta ? "bg-green-50/40" : "bg-amber-50/40")">
         @ChildContent
     </td>
@@ -10,5 +10,7 @@
     [Parameter] public VarianteFilaFormulario Variante { get; set; } = VarianteFilaFormulario.Alta;
     /// <summary>Número de columnas de la tabla (colspan).</summary>
     [Parameter, EditorRequired] public int Columnas { get; set; }
+    /// <summary><c>id</c> de la fila (la de edición: <c>linea-N</c>, destino de los enlaces de ResumenErrores); null = sin id.</summary>
+    [Parameter] public string? Id { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }

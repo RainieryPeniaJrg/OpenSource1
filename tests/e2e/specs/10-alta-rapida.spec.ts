@@ -140,18 +140,19 @@ test('menú de Facturación, paleta, rutas antiguas, serie solo para el administ
     await page.getByRole('link', { name: `Usar ${nombreCliente}` }).click();
     await expect(page).toHaveURL(/socioId=/);
 
-    // Administrador en el alta: "Más opciones → Cambiar serie de registro" (dentro del formulario de la primera línea, que con el
-    // tipo Producto aparece al elegir el producto; aquí, con el tipo "Cuenta contable").
+    // Administrador en el alta: "Más opciones → Cambiar serie de registro" en la tarjeta del cliente, visible con cualquier tipo de
+    // línea y antes de elegir producto (R9-C3); aquí, con el tipo "Cuenta contable".
     await expect(page.getByTestId('serie-registro')).toContainText(/Se numerará con la serie \S+ · próximo \S+/);
     await page.getByTestId('tipos-linea').getByRole('link', { name: 'Cuenta contable' }).click();
     await expect(page).toHaveURL(/tipo=2/);
     await page.getByTestId('mas-opciones').locator('summary').click();
     await expect(page.getByTestId('mas-opciones').getByLabel('Cambiar serie de registro')).toBeVisible();
 
-    // Error de validación (precio vacío): no se crea nada y el mensaje queda junto al campo (el foco: test aparte, más abajo).
+    // Error de validación (precio vacío): no se crea nada y el mensaje sale en el resumen de errores (y junto al campo; el foco: test
+    // aparte, más abajo).
     await rellenarLineaDeCuenta(page, '');
     await page.getByTestId('agregar-linea').click();
-    await expect(page.getByText(/El precio unitario es obligatorio/)).toBeVisible();
+    await expect(page.getByTestId('resumen-errores').getByText(/El precio unitario es obligatorio/)).toBeVisible();
     await expect(page).toHaveURL(/\/facturas-venta\/nueva/);
 
     // Con precio se crea la factura en preparación (se descarta al final).
@@ -199,12 +200,9 @@ test('menú de Facturación, paleta, rutas antiguas, serie solo para el administ
   }
 });
 
-// Puerta G2 (teclado): tras un error de validación (precio vacío) el foco debería quedar en el resumen de errores. HOY FALLA: los
-// errores de DataAnnotations/IValidatableObject del formulario de línea solo se pintan junto al campo (ValidationMessage) y
-// ResumenErrores (data-resumen-errores, que app.errores.js enfoca) solo aparece con errores de la API. test.fail() lo deja registrado:
-// cuando la página muestre el resumen, este test empezará a "pasar inesperadamente" y habrá que quitar la marca.
+// Puerta G2 (teclado): tras un error de validación (precio vacío) el foco queda en el resumen de errores (R9-C1: el OnInvalidSubmit del
+// formulario vuelca los mensajes en ResumenErrores, data-resumen-errores, que app.errores.js enfoca).
 test('foco en el resumen de errores tras un precio vacío en la primera línea', async ({ page }) => {
-  test.fail(true, 'Brecha conocida (R9): sin resumen de errores para la validación del formulario de la línea.');
   await iniciarSesion(page, usuarios.admin);
   // Cualquier cliente sirve: el envío con error no crea nada.
   await page.goto('/facturas-venta/nueva');
@@ -214,6 +212,6 @@ test('foco en el resumen de errores tras un precio vacío en la primera línea',
   await expect(page).toHaveURL(/tipo=2/);
   await rellenarLineaDeCuenta(page, '');
   await page.getByTestId('agregar-linea').click();
-  await expect(page.getByText(/El precio unitario es obligatorio/)).toBeVisible();
+  await expect(page.getByTestId('resumen-errores').getByText(/El precio unitario es obligatorio/)).toBeVisible();
   await expect(page.getByTestId('resumen-errores')).toBeFocused({ timeout: 3_000 });
 });

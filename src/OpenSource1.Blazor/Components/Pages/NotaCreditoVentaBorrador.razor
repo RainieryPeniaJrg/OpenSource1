@@ -72,7 +72,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
 @* Cabecera: el componente está SIEMPRE en el árbol (sin mostrarse = EditForm vacío con el mismo FormName), para que un POST obsoleto
    o forzado de "guardar-cabecera-nota" llegue al handler y muestre el mensaje real de la API (409/403; Review Focus 5). La nota no
    tiene opciones imprescindibles: CargaFallida siempre false (F7; el selector del Administrador conserva la serie actual). *@
-<DocumentoCabeceraEditable Model="UpdateInput" FormName="guardar-cabecera-nota" OnValidSubmit="GuardarCabeceraAsync"
+<DocumentoCabeceraEditable Model="UpdateInput" FormName="guardar-cabecera-nota" OnValidSubmit="GuardarCabeceraAsync" OnInvalidSubmit="ErroresDelFormulario"
                            Mostrar="MuestraFormCabecera" CargaFallida="false" Botones="@BotonesCabecera">
     <input type="hidden" name="UpdateInput.Xmin" value="@UpdateInput!.Xmin" />
     <DatosDerivados Datos="@DatosNota" />
@@ -202,7 +202,7 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
                                 }
                                 else
                                 {
-                                    <EditForm Model="AddInput" FormName="add-linea" OnValidSubmit="CreateLineaAsync" Enhance="true">
+                                    <EditForm Model="AddInput" FormName="add-linea" OnValidSubmit="CreateLineaAsync" OnInvalidSubmit="ErroresDelFormulario" Enhance="true">
                                         <DataAnnotationsValidator />
                                         <input type="hidden" name="AddInput.LineaFacturaVentaId" value="@lineaAAgregar.LineaFacturaVentaId" />
                                         @CamposLinea(AddInput!, "AddInput", lineaAAgregar.Tipo, $"{lineaAAgregar.ProductoCodigo ?? lineaAAgregar.CuentaContableNumero} — {lineaAAgregar.Descripcion}", lineaAAgregar.CantidadPendiente, lineaAAgregar.UnidadMedidaCodigo)
@@ -616,9 +616,9 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     /// <summary>Fila de edición de una línea dentro de la tabla (NS17): el EditForm update-linea en una única celda.</summary>
     private RenderFragment FilaEdicion(LineaNotaCreditoVentaBorradorResponse linea) => __builder =>
     {
-        <DocumentoFilaFormulario Variante="VarianteFilaFormulario.Edicion" Columnas="ColumnasTabla">
+        <DocumentoFilaFormulario Id="@($"linea-{linea.NumeroLinea}")" Variante="VarianteFilaFormulario.Edicion" Columnas="ColumnasTabla">
             <p class="mb-3 text-sm font-bold text-amber-800">Modificar línea @linea.NumeroLinea</p>
-            <EditForm Model="UpdateInputLinea" FormName="update-linea" OnValidSubmit="UpdateLineaAsync" Enhance="true">
+            <EditForm Model="UpdateInputLinea" FormName="update-linea" OnValidSubmit="UpdateLineaAsync" OnInvalidSubmit="ErroresDeLaLinea" Enhance="true">
                 <DataAnnotationsValidator />
                 <input type="hidden" name="UpdateInputLinea.Xmin" value="@UpdateInputLinea!.Xmin" />
                 @CamposLinea(UpdateInputLinea, "UpdateInputLinea", linea.Tipo, $"{linea.ProductoCodigo ?? linea.CuentaContableNumero} — {linea.Descripcion}", linea.CantidadFacturada - linea.CantidadAcreditada, linea.UnidadMedidaCodigo)
@@ -861,6 +861,13 @@ else if (EsPosteada && borrador.NotaCreditoVentaNumero is { } numeroNota)
     }
 
     private static string Cantidad(decimal valor) => valor.ToString("0.######", CultureInfo.InvariantCulture);
+
+    /// <summary>R9-C1: envío inválido de la cabecera o de la fila de alta → el ResumenErrores único de la página (enfocado por app.errores.js).</summary>
+    private void ErroresDelFormulario(EditContext contexto) => Show("warning", ErroresFormulario.Mensaje, ErroresFormulario.Desde(contexto));
+
+    /// <summary>Como <see cref="ErroresDelFormulario"/>, con "Línea N: " para enlazar a la fila en edición (#linea-N).</summary>
+    private void ErroresDeLaLinea(EditContext contexto) =>
+        Show("warning", ErroresFormulario.Mensaje, ErroresFormulario.Desde(contexto, lineaAEditar?.NumeroLinea));
 
     private void Show(string type, string? text, IReadOnlyList<string>? errors = null)
     {

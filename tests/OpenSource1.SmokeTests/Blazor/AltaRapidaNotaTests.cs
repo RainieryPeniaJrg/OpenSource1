@@ -176,6 +176,34 @@ public sealed class AltaRapidaNotaTests
         Assert.Equal(Url(IdNota), FormulariosSsr.Destino(respuesta));
     }
 
+    [Fact]
+    public async Task EnPreparacion_ModificarLineaSinCantidad_ResumenDeErroresConEnlaceALaFila()
+    {
+        using var app = Configurar(new BlazorSsrFactory(), []);
+        var idLinea = Guid.Parse("7d0c9a51-0000-0000-0000-0000000007b9");
+        app.Simular<INotaCreditoVentaApiClient>().Setup(c => c.ListLineasAsync(IdNota, It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new LineaNotaCreditoVentaBorradorResponse
+            {
+                Id = idLinea, NumeroLinea = 10000, Tipo = TipoLineaFactura.Producto, ProductoCodigo = "P-1", Descripcion = "Producto uno",
+                Cantidad = 1m, CantidadFacturada = 2m, PrecioUnitario = 50m, ImporteLinea = 50m, IdentificadorIva = "ITBIS18", PorcentajeIva = 18m,
+                DevolverInventario = true, Xmin = 4,
+            },
+        ]);
+
+        var respuesta = await FormulariosSsr.EnviarAsync(app.Cliente(), $"{Url(IdNota)}?editLineaId={idLinea}", "update-linea",
+            new Dictionary<string, string> { ["UpdateInputLinea.CantidadTexto"] = "", ["UpdateInputLinea.Xmin"] = "4" });
+        var html = HtmlSsr.Decodificar(await respuesta.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+        var inicio = html.IndexOf("data-testid=\"resumen-errores\"", StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "Sin resumen de errores.");
+        var resumen = html[html.LastIndexOf('<', inicio)..html.IndexOf("</div>", inicio, StringComparison.Ordinal)];
+        Assert.Contains("role=\"alert\"", resumen);
+        Assert.Contains("<a class=\"underline\" href=\"#linea-10000\">Línea 10000: La cantidad es obligatoria.</a>", resumen);
+        Assert.Contains("id=\"linea-10000\" data-testid=\"fila-edicion\"", html);
+    }
+
     private static BlazorSsrFactory Configurar(
         BlazorSsrFactory app, IReadOnlyList<NotaCreditoVentaBorradorResponse> notasEnPreparacion, bool acreditadaPorCompleto = false)
     {

@@ -9,7 +9,7 @@
         {
             <div class="mb-4"><MessageBox Type="danger" Message="@MensajeCargaFallida" /></div>
         }
-        <EditForm Model="Model" FormName="@FormName" OnValidSubmit="OnValidSubmit" Enhance="true">
+        <EditForm Model="Model" FormName="@FormName" OnValidSubmit="OnValidSubmit" OnInvalidSubmit="OnInvalidSubmit" Enhance="true">
             <DataAnnotationsValidator />
             @ChildContent
             @if (!CargaFallida)
@@ -28,7 +28,7 @@
 }
 else
 {
-    <EditForm Model="Model" FormName="@FormName" OnValidSubmit="OnValidSubmit"></EditForm>
+    <EditForm Model="Model" FormName="@FormName" OnValidSubmit="OnValidSubmit" OnInvalidSubmit="OnInvalidSubmit"></EditForm>
 }
 
 @code {
@@ -36,6 +36,8 @@ else
     [Parameter, EditorRequired] public object Model { get; set; } = default!;
     [Parameter, EditorRequired] public string FormName { get; set; } = string.Empty;
     [Parameter] public EventCallback<EditContext> OnValidSubmit { get; set; }
+    /// <summary>Envío inválido (R9-C1): la página vuelca los mensajes en su ResumenErrores (<see cref="ErroresFormulario"/>).</summary>
+    [Parameter] public EventCallback<EditContext> OnInvalidSubmit { get; set; }
     /// <summary>true = tarjeta con los campos; false = solo el EditForm vacío (siempre en el árbol).</summary>
     [Parameter] public bool Mostrar { get; set; } = true;
     /// <summary>Fallo al cargar opciones imprescindibles (socios, almacenes). El fallo de series NO cuenta (F7).</summary>

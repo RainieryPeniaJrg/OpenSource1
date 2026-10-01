@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
 using OpenSource1.Application.Features.ConfiguracionNumeracion.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Calculo;
@@ -317,4 +318,17 @@ public static class ListaPreparacion
 public sealed class DescartarDocumentoForm
 {
     public Guid Id { get; set; }
+}
+
+/// <summary>
+/// Errores de validación de un formulario (DataAnnotations / IValidatableObject) hacia el ResumenErrores único de la página (R9-C1):
+/// el <c>OnInvalidSubmit</c> del EditForm los vuelca aquí para que el resumen (role="alert") aparezca y app.errores.js lo enfoque,
+/// igual que con los errores de la API. Con <c>numeroLinea</c> cada mensaje lleva "Línea N: " y el resumen enlaza a la fila #linea-N.
+/// </summary>
+public static class ErroresFormulario
+{
+    public const string Mensaje = "Revise los datos marcados.";
+
+    public static IReadOnlyList<string> Desde(EditContext contexto, int? numeroLinea = null) =>
+        [.. contexto.GetValidationMessages().Distinct().Select(m => numeroLinea is { } n ? $"Línea {n}: {m}" : m)];
 }

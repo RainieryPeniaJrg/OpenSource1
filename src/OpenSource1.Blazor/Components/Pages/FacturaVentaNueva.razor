@@ -88,7 +88,33 @@ else
             <a href="@CambiarClienteHref" class="text-xs font-semibold text-brand-600 hover:text-brand-700">Cambiar cliente</a>
         </div>
         <DatosDerivados Datos="@DatosCliente" DetallesContables="@DetallesContables" />
-        <NumeracionRegistro Codigo="@serieRegistro?.SerieCodigo" Proximo="@proximo" />
+        @if (esAdministrador)
+        {
+            @* R9-C3: "Más opciones → Cambiar serie de registro" visible con cualquier tipo de línea y antes de elegir producto. La serie
+               elegida viaja en ?serieRegistroId= (enlaces de la página y buscador de producto) y, al agregar la línea, en el campo oculto
+               AltaInput.SerieRegistroId. Solo el Administrador: para el resto ni se pinta ni se lee de la query. *@
+            <form method="get" action="/facturas-venta/nueva" data-enhance data-testid="form-serie-registro">
+                <input type="hidden" name="socioId" value="@socio.Id" />
+                <input type="hidden" name="tipo" value="@((int)AddTipo)" />
+                @if (AddProductoId is { } productoElegido)
+                {
+                    <input type="hidden" name="addProductoId" value="@productoElegido" />
+                }
+                @if (!string.IsNullOrWhiteSpace(AddProductoQuery))
+                {
+                    <input type="hidden" name="addProductoQuery" value="@AddProductoQuery" />
+                }
+                @RetornoOculto
+                <NumeracionRegistro Codigo="@serieRegistro?.SerieCodigo" Proximo="@proximo" PuedeCambiar="true" Id="serieRegistroId" Name="serieRegistroId"
+                                    Series="@seriesRegistro.Items" Seleccion="@AltaInput!.SerieRegistroId" CargaFallida="@seriesRegistro.CargaFallida">
+                    <button type="submit" class="btn-press mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Aplicar</button>
+                </NumeracionRegistro>
+            </form>
+        }
+        else
+        {
+            <NumeracionRegistro Codigo="@serieRegistro?.SerieCodigo" Proximo="@proximo" />
+        }
     </div>
 
     <div class="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid="fila-alta">
@@ -107,7 +133,7 @@ else
                 <BuscadorProducto ActionUrl="/facturas-venta/nueva" QueryParamName="addProductoQuery" Termino="@AddProductoQuery"
                                   Resultados="@addProductoOpciones" CargaFallida="@addProductoOpcionesCargaFallida"
                                   ConstruirUrlUsar="@(id => BuildUrl(tipo: 1, addProductoId: id, addProductoQuery: AddProductoQuery))">
-                    <CamposOcultos><input type="hidden" name="socioId" value="@socio.Id" /><input type="hidden" name="tipo" value="1" />@RetornoOculto</CamposOcultos>
+                    <CamposOcultos><input type="hidden" name="socioId" value="@socio.Id" /><input type="hidden" name="tipo" value="1" />@SerieOculta@RetornoOculto</CamposOcultos>
                 </BuscadorProducto>
             }
             else
@@ -120,15 +146,13 @@ else
                         <a href="@BuildUrl(tipo: 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cambiar producto</a>
                     </div>
                 }
-                <EditForm Model="AltaInput" FormName="alta-factura" OnValidSubmit="CrearAsync" Enhance="true">
+                <EditForm Model="AltaInput" FormName="alta-factura" OnValidSubmit="CrearAsync" OnInvalidSubmit="ErroresDelFormulario" Enhance="true">
                     <DataAnnotationsValidator />
                     <input type="hidden" name="AltaInput.SocioNegocioId" value="@socio.Id" />
                     @if (esAdministrador)
                     {
-                        @* Solo "Más opciones" (la línea de numeración ya está en la tarjeta del cliente). *@
-                        <NumeracionRegistro MostrarInfo="false" PuedeCambiar="true" Id="AltaInput_SerieRegistroId" Name="AltaInput.SerieRegistroId"
-                                            Codigo="@serieRegistro?.SerieCodigo" Series="@seriesRegistro.Items" Seleccion="@AltaInput!.SerieRegistroId"
-                                            CargaFallida="@seriesRegistro.CargaFallida" />
+                        @* La serie elegida en "Más opciones" (tarjeta del cliente); vacío = la configurada. *@
+                        <input type="hidden" name="AltaInput.SerieRegistroId" value="@AltaInput!.SerieRegistroId" />
                     }
                     <div class="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="cabecera-alta">
                         <div>
@@ -186,6 +210,9 @@ else
     [SupplyParameterFromQuery(Name = "tipo")] private int? TipoQuery { get; set; }
     [SupplyParameterFromQuery(Name = "addProductoQuery")] private string? AddProductoQuery { get; set; }
     [SupplyParameterFromQuery(Name = "addProductoId")] private string? AddProductoIdTexto { get; set; }
+    // R9-C3: serie de registro elegida por el Administrador en "Más opciones" (tolerante, como socioId); ignorada para el resto.
+    [SupplyParameterFromQuery(Name = "serieRegistroId")] private string? SerieRegistroIdTexto { get; set; }
+    private Guid? SerieElegida => esAdministrador ? InventarioVistasOpciones.ParseGuid(SerieRegistroIdTexto) : null;
     private Guid? AddProductoId => InventarioVistasOpciones.ParseGuid(AddProductoIdTexto);
     [SupplyParameterFromForm(FormName = "alta-factura")] private AltaFacturaForm? AltaInput { get; set; }
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
@@ -260,6 +287,11 @@ else
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
         canAdd = permisos.CanAdd;
         esAdministrador = await permisos.PuedeAsync(ApplicationPolicies.CanAdministrar);
+        if (altaNueva)
+        {
+            AltaInput.SerieRegistroId = SerieElegida;
+        }
+
         if (!canAdd)
         {
             return;
@@ -453,9 +485,22 @@ else
         if (tipo is { } t) parametros.Add($"tipo={t}");
         if (addProductoId.HasValue) parametros.Add($"addProductoId={addProductoId.Value}");
         if (!string.IsNullOrWhiteSpace(addProductoQuery)) parametros.Add($"addProductoQuery={Uri.EscapeDataString(addProductoQuery)}");
+        if (SerieElegida is { } serie) parametros.Add($"serieRegistroId={serie}");
         if (!string.IsNullOrWhiteSpace(ReturnUrl)) parametros.Add($"returnUrl={Uri.EscapeDataString(Volver)}");
         return parametros.Count == 0 ? "/facturas-venta/nueva" : $"/facturas-venta/nueva?{string.Join("&", parametros)}";
     }
+
+    /// <summary>Serie elegida por el Administrador, oculta en el buscador de producto (GET) para no perderla.</summary>
+    private RenderFragment SerieOculta => __builder =>
+    {
+        if (SerieElegida is { } serie)
+        {
+            <input type="hidden" name="serieRegistroId" value="@serie" />
+        }
+    };
+
+    /// <summary>R9-C1: envío inválido (validación del formulario) → el ResumenErrores único de la página (enfocado por app.errores.js).</summary>
+    private void ErroresDelFormulario(EditContext contexto) => Show(ErroresFormulario.Mensaje, ErroresFormulario.Desde(contexto));
 
     /// <summary>returnUrl oculto en los formularios GET (buscadores), para no perder la vuelta.</summary>
     private RenderFragment RetornoOculto => __builder =>
