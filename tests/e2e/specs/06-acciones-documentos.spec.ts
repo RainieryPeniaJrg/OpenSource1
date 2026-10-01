@@ -9,7 +9,9 @@ test('desde un cliente: Crear ▾ Factura abre la nueva factura con el cliente p
   await page.getByTestId('menu-crear').locator('summary').click();
   await page.getByTestId('menu-crear').getByRole('link', { name: 'Factura', exact: true }).click();
   await expect(page).toHaveURL(/\/facturas-venta\/nueva\?.*socioId=/);
-  await expect(page.getByTestId('cliente-precargado')).toBeVisible();
+  // Alta rápida: el cliente elegido se muestra con sus datos derivados en solo lectura.
+  await expect(page.getByTestId('cliente-elegido')).toBeVisible();
+  await expect(page.getByTestId('datos-derivados')).toBeVisible();
   await captura(page, '26-nueva-factura-precargada', /nueva factura/i);
 });
 
