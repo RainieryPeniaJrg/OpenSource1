@@ -27,11 +27,11 @@ public sealed class AltaFacturaForm : LineaFacturaForm
     /// <summary>Solo el Administrador ("Más opciones"); null = la configurada.</summary>
     public Guid? SerieRegistroId { get; set; }
 
-    public DateOnly? FechaRegistro => Fecha(FechaRegistroTexto);
+    public DateOnly? FechaRegistro => EntradaFecha.Opcional(FechaRegistroTexto);
 
-    public DateOnly? FechaDocumento => Fecha(FechaDocumentoTexto);
+    public DateOnly? FechaDocumento => EntradaFecha.Opcional(FechaDocumentoTexto);
 
-    public DateOnly? FechaVencimiento => Fecha(FechaVencimientoTexto);
+    public DateOnly? FechaVencimiento => EntradaFecha.Opcional(FechaVencimientoTexto);
 
     public override IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -40,17 +40,12 @@ public sealed class AltaFacturaForm : LineaFacturaForm
             yield return resultado;
         }
 
-        foreach (var (texto, campo, etiqueta) in new[]
-                 {
-                     (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
-                     (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
-                     (FechaVencimientoTexto, nameof(FechaVencimientoTexto), "La fecha de vencimiento"),
-                 })
+        foreach (var resultado in EntradaFecha.Validar(
+            (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
+            (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
+            (FechaVencimientoTexto, nameof(FechaVencimientoTexto), "La fecha de vencimiento")))
         {
-            if (!string.IsNullOrWhiteSpace(texto) && !EntradaFecha.TryParse(texto, out _, out var error, etiqueta))
-            {
-                yield return new ValidationResult(error ?? $"{etiqueta} no es válida.", [campo]);
-            }
+            yield return resultado;
         }
     }
 
@@ -62,7 +57,4 @@ public sealed class AltaFacturaForm : LineaFacturaForm
             SerieBorradorId: null,
             SerieRegistroId: esAdministrador ? SerieRegistroId : null,
             PrimeraLinea: ToInput(tipo, productoId, unidadMedidaId));
-
-    private static DateOnly? Fecha(string? texto) =>
-        !string.IsNullOrWhiteSpace(texto) && EntradaFecha.TryParse(texto, out var valor, out _) ? valor : null;
 }

@@ -329,6 +329,20 @@ public sealed class AltaRapidaFacturaTests
     }
 
     [Fact]
+    public async Task EnPreparacion_Liberada_SerieQueYaNoNumera_RegistrarDeshabilitadoConMotivo()
+    {
+        using var app = Configurar(new BlazorSsrFactory(), proximoError: "La serie 'FV' está inactiva.");
+
+        var html = HtmlSsr.Decodificar(await HtmlSsr.HtmlAsync(app.Cliente(), Url(IdLiberada)));
+
+        var aviso = html[html.IndexOf("data-testid=\"aviso-liberada\"", StringComparison.Ordinal)..];
+        Assert.Contains("<button type=\"button\" disabled data-testid=\"registrar\"", aviso);
+        Assert.Contains("No se puede registrar: La serie 'FV' está inactiva.", aviso);
+        Assert.DoesNotContain($"href=\"{Url(IdLiberada)}?registrar=true\"", html);
+        Assert.Contains(">Volver a editar</button>", aviso);
+    }
+
+    [Fact]
     public async Task Descartar_ConConfirmacion_VuelveALaListaEnPreparacion()
     {
         using var app = Configurar(new BlazorSsrFactory());

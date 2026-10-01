@@ -87,11 +87,23 @@ else
             @if (canModify)
             {
                 <div class="mt-3 flex flex-wrap items-center gap-3">
-                    <a href="@BuildUrl(registrar: true)" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Registrar factura</a>
+                    @* Mismo criterio que BotonesPreparacion: si la serie de registro ya no numera, deshabilitado con el motivo visible. *@
+                    @if (BotonesPreparacion.MotivoNoRegistrable(proximo) is not null)
+                    {
+                        <button type="button" disabled data-testid="registrar" aria-describedby="motivo-registrar" class="rounded-lg bg-slate-300 px-4 py-2 text-sm font-semibold text-white">Registrar factura</button>
+                    }
+                    else
+                    {
+                        <a href="@BuildUrl(registrar: true)" data-testid="registrar" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Registrar factura</a>
+                    }
                     <EditForm Model="ReabrirInput" FormName="reabrir" OnValidSubmit="ReabrirAsync">
                         <button type="submit" data-testid="volver-a-editar" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Volver a editar</button>
                     </EditForm>
                 </div>
+                @if (BotonesPreparacion.MotivoNoRegistrable(proximo) is { } motivoLiberada)
+                {
+                    <p id="motivo-registrar" class="mt-2 text-xs text-red-700" data-testid="motivo-registrar">@motivoLiberada</p>
+                }
             }
         </div>
     }

@@ -345,11 +345,11 @@
 
         public long Xmin { get; set; }
 
-        public DateOnly? FechaRegistro => Fecha(FechaRegistroTexto);
+        public DateOnly? FechaRegistro => EntradaFecha.Opcional(FechaRegistroTexto);
 
-        public DateOnly? FechaDocumento => Fecha(FechaDocumentoTexto);
+        public DateOnly? FechaDocumento => EntradaFecha.Opcional(FechaDocumentoTexto);
 
-        public DateOnly? FechaVencimiento => Fecha(FechaVencimientoTexto);
+        public DateOnly? FechaVencimiento => EntradaFecha.Opcional(FechaVencimientoTexto);
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
@@ -364,22 +364,14 @@
                 yield return new ValidationResult("La fecha de documento es obligatoria al modificar.", [nameof(FechaDocumentoTexto)]);
             }
 
-            foreach (var (texto, campo, etiqueta) in new[]
-                     {
-                         (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
-                         (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
-                         (FechaVencimientoTexto, nameof(FechaVencimientoTexto), "La fecha de vencimiento"),
-                     })
+            foreach (var resultado in EntradaFecha.Validar(
+                (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
+                (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
+                (FechaVencimientoTexto, nameof(FechaVencimientoTexto), "La fecha de vencimiento")))
             {
-                if (!string.IsNullOrWhiteSpace(texto) && !EntradaFecha.TryParse(texto, out _, out var error, etiqueta))
-                {
-                    yield return new ValidationResult(error ?? $"{etiqueta} no es válida.", [campo]);
-                }
+                yield return resultado;
             }
         }
-
-        private static DateOnly? Fecha(string? texto) =>
-            !string.IsNullOrWhiteSpace(texto) && EntradaFecha.TryParse(texto, out var valor, out _) ? valor : null;
     }
 
     public sealed class DeleteForm
