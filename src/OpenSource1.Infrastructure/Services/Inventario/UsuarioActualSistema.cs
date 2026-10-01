@@ -7,4 +7,5 @@ public sealed class UsuarioActualSistema : IUsuarioActual
 {
     public string Nombre => "system";
     public Guid? Id => null;
+    public bool EsAdministrador => false;
 }

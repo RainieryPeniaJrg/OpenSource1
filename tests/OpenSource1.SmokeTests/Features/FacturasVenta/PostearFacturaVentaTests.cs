@@ -13,6 +13,7 @@ using OpenSource1.Application.Features.SociosNegocio.Commands;
 using OpenSource1.Application.Features.SociosNegocio.Handlers;
 using OpenSource1.Application.Services.Clientes;
 using OpenSource1.Application.Services.Contabilidad;
+using OpenSource1.Application.Services.Inventario;
 using OpenSource1.Core.Common;
 using OpenSource1.Core.Entities;
 using OpenSource1.Core.Entities.Contabilidad;
@@ -977,45 +978,59 @@ public sealed class PostearFacturaVentaTests(PostgresTestFixture fixture) : ICla
     // ----- Series del borrador (spec no-series) -----
 
     [Fact]
-    public async Task Alta_SinSeries_UsaLasConfiguradas_YConSeriesElegidasNumeraConLaDeBorrador()
+    public async Task Alta_SinSeries_UsaLasConfiguradas_YElAdministradorEligeLaDeRegistro()
     {
         var socio = await SocioAsync();
-        var (serieBorrador, lineaBorrador, prefijo) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.BorradorFacturaVenta);
         var (serieRegistro, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.FacturaVenta);
 
-        var porDefecto = Ok(await CrearBorradorConSeriesAsync(socio, null, null, null));
-        var elegido = Ok(await CrearBorradorConSeriesAsync(socio, null, serieBorrador, serieRegistro));
+        var porDefecto = Ok(await CrearBorradorConSeriesAsync(socio, null, null, null, administrador: false));
+        var elegida = Ok(await CrearBorradorConSeriesAsync(socio, null, null, serieRegistro, administrador: true));
 
         Assert.Equal((SerieFacturaVentaIds.SerieBorradorId, SerieFacturaVentaIds.SeriePosteadaId), (porDefecto.SerieBorradorId, porDefecto.SerieRegistroId));
         Assert.Equal(("FV-BORR", "FV"), (porDefecto.SerieBorradorCodigo, porDefecto.SerieRegistroCodigo));
-        Assert.Equal(($"{prefijo}000001", serieBorrador, serieRegistro), (elegido.Numero, elegido.SerieBorradorId, elegido.SerieRegistroId));
-        Assert.Equal($"{prefijo}000001", await SeriesPrueba.UltimoAsync(fixture.AppConnectionString, lineaBorrador));
+        Assert.Equal((SerieFacturaVentaIds.SerieBorradorId, serieRegistro), (elegida.SerieBorradorId, elegida.SerieRegistroId));
     }
 
-    [Fact]
-    public async Task Alta_SerieDeBorradorDeOtroTipo_OSerieRegistroInactiva_400_SinConsumirNumero()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Alta_SerieDeBorradorEnviada_400NoEditable_ParaTodos_SinConsumirNumero(bool administrador)
     {
         var socio = await SocioAsync();
-        var (deCobro, lineaCobro, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.Cobro);
-        var (inactiva, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.FacturaVenta, activa: false);
+        var (serieBorrador, lineaBorrador, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.BorradorFacturaVenta);
         var ultimoFvBorr = await UltimoNumeroAsync(SerieFacturaVentaIds.LineaSerieBorradorId);
 
-        var otroTipo = await CrearBorradorConSeriesAsync(socio, null, deCobro, null);
-        var registroInactiva = await CrearBorradorConSeriesAsync(socio, null, null, inactiva);
+        var resultado = await CrearBorradorConSeriesAsync(socio, null, serieBorrador, null, administrador);
 
-        Assert.Equal(("numeracion.tipo_incorrecto", "SerieBorradorId"), Unico(otroTipo));
-        Assert.Equal(("numeracion.serie_inactiva", "SerieRegistroId"), Unico(registroInactiva));
-        Assert.Equal("", await SeriesPrueba.UltimoAsync(fixture.AppConnectionString, lineaCobro));
+        Assert.Equal(("serie.no_editable", "SerieBorradorId"), Unico(resultado));
+        Assert.Equal("", await SeriesPrueba.UltimoAsync(fixture.AppConnectionString, lineaBorrador));
         Assert.Equal(ultimoFvBorr, await UltimoNumeroAsync(SerieFacturaVentaIds.LineaSerieBorradorId));
     }
 
     [Fact]
-    public async Task Modificar_SerieRegistro_ValidaTipoYActividad_YUnLiberadoNoLaCambia()
+    public async Task Alta_SerieRegistroSinSerAdministrador_400NoEditable_YInactivaDelAdministrador_400_SinConsumirNumero()
+    {
+        var socio = await SocioAsync();
+        var (otra, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.FacturaVenta);
+        var (inactiva, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.FacturaVenta, activa: false);
+        var ultimoFvBorr = await UltimoNumeroAsync(SerieFacturaVentaIds.LineaSerieBorradorId);
+
+        var noAdministrador = await CrearBorradorConSeriesAsync(socio, null, null, otra, administrador: false);
+        var inactivaDelAdministrador = await CrearBorradorConSeriesAsync(socio, null, null, inactiva, administrador: true);
+
+        Assert.Equal(("serie.no_editable", "SerieRegistroId"), Unico(noAdministrador));
+        Assert.Equal(("numeracion.serie_inactiva", "SerieRegistroId"), Unico(inactivaDelAdministrador));
+        Assert.Equal(ultimoFvBorr, await UltimoNumeroAsync(SerieFacturaVentaIds.LineaSerieBorradorId));
+    }
+
+    [Fact]
+    public async Task Modificar_SerieRegistro_SoloElAdministrador_ValidaTipoYActividad_YUnLiberadoNoLaCambia()
     {
         var socio = await SocioAsync();
         var (otra, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.FacturaVenta);
         var (deBorrador, _, _) = await SeriesPrueba.CrearAsync(fixture.AppConnectionString, TipoDocumentoSerie.BorradorFacturaVenta);
         var borrador = Ok(await CrearBorradorConSeriesAsync(socio, null, null, null));
+        Assert.Equal(("serie.no_editable", "SerieRegistroId"), Unico(await CambiarSerieRegistroAsync(borrador.Id, otra, borrador.Xmin, administrador: false)));
 
         Assert.Equal(("numeracion.tipo_incorrecto", "SerieRegistroId"), Unico(await CambiarSerieRegistroAsync(borrador.Id, deBorrador, borrador.Xmin)));
         var cambiado = Ok(await CambiarSerieRegistroAsync(borrador.Id, otra, borrador.Xmin));
@@ -1102,7 +1117,9 @@ public sealed class PostearFacturaVentaTests(PostgresTestFixture fixture) : ICla
         {
             await EnScopeAsync(async sp => await ActivatorUtilities.CreateInstance<UpdateFacturaVentaBorradorCommandHandler>(sp).Handle(
                 new UpdateFacturaVentaBorradorCommand(borrador.Id, null, null, null, null, null, null, "x", posteado.Xmin), default)),
-            await EnScopeAsync(async sp => await ActivatorUtilities.CreateInstance<UpdateFacturaVentaBorradorCommandHandler>(sp).Handle(
+            // La serie de registro solo la envía el Administrador (spec alta rápida): así llega a la comprobación de Posteada.
+            await EnScopeAsync(async sp => await ActivatorUtilities.CreateInstance<UpdateFacturaVentaBorradorCommandHandler>(
+                sp, (IUsuarioActual)new FechasRegistroPrueba.Usuario(null, EsAdministrador: true)).Handle(
                 new UpdateFacturaVentaBorradorCommand(borrador.Id, null, null, null, null, null, null, null, posteado.Xmin,
                     SerieFacturaVentaIds.SeriePosteadaId), default)),
             await EnScopeAsync(async sp => await ActivatorUtilities.CreateInstance<CreateLineaFacturaVentaBorradorCommandHandler>(sp).Handle(
@@ -1875,18 +1892,22 @@ public sealed class PostearFacturaVentaTests(PostgresTestFixture fixture) : ICla
         return ((EstadoFacturaBorrador)fila.Estado, fila.Factura);
     }
 
-    private async Task<Result<FacturaVentaBorradorResponse>> CrearBorradorConSeriesAsync(Guid venderA, Guid? almacen, Guid? serieBorrador, Guid? serieRegistro)
+    private async Task<Result<FacturaVentaBorradorResponse>> CrearBorradorConSeriesAsync(
+        Guid venderA, Guid? almacen, Guid? serieBorrador, Guid? serieRegistro, bool administrador = true)
     {
         await using var scope = _prueba.Provider.CreateAsyncScope();
-        var handler = ActivatorUtilities.CreateInstance<CreateFacturaVentaBorradorCommandHandler>(scope.ServiceProvider);
+        var handler = ActivatorUtilities.CreateInstance<CreateFacturaVentaBorradorCommandHandler>(
+            scope.ServiceProvider, (IUsuarioActual)new FechasRegistroPrueba.Usuario(null, administrador));
         return await handler.Handle(
             new CreateFacturaVentaBorradorCommand(venderA, null, D10, D10, null, almacen, null, serieBorrador, serieRegistro), default);
     }
 
-    private async Task<Result<FacturaVentaBorradorResponse>> CambiarSerieRegistroAsync(Guid borradorId, Guid serieRegistro, long xmin)
+    private async Task<Result<FacturaVentaBorradorResponse>> CambiarSerieRegistroAsync(
+        Guid borradorId, Guid serieRegistro, long xmin, bool administrador = true)
     {
         await using var scope = _prueba.Provider.CreateAsyncScope();
-        var handler = ActivatorUtilities.CreateInstance<UpdateFacturaVentaBorradorCommandHandler>(scope.ServiceProvider);
+        var handler = ActivatorUtilities.CreateInstance<UpdateFacturaVentaBorradorCommandHandler>(
+            scope.ServiceProvider, (IUsuarioActual)new FechasRegistroPrueba.Usuario(null, administrador));
         return await handler.Handle(
             new UpdateFacturaVentaBorradorCommand(borradorId, null, null, null, null, null, null, null, xmin, serieRegistro), default);
     }

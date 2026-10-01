@@ -51,4 +51,20 @@ public sealed class UsuarioActualHttpTests(PostgresTestFixture fixture) : IClass
 
         Assert.IsType<UsuarioActualHttp>(scope.ServiceProvider.GetRequiredService<IUsuarioActual>());
     }
+
+    [Fact]
+    public void EsAdministrador_SoloConElRolAdministrador_YSinPeticionEsFalso()
+    {
+        static UsuarioActualHttp Con(params string[] roles) => new(new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(roles.Select(r => new Claim(ClaimTypes.Role, r)), "Test")),
+            },
+        });
+
+        Assert.True(Con("Administrador").EsAdministrador);
+        Assert.False(Con("Supervisor", "Ejecutor").EsAdministrador);
+        Assert.False(new UsuarioActualHttp(new HttpContextAccessor()).EsAdministrador);
+    }
 }

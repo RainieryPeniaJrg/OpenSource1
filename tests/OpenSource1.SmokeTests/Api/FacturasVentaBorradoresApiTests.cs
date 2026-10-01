@@ -726,29 +726,43 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
     }
 
     [Fact]
-    public async Task Alta_ConSeriesElegidas_LasGuarda_YUnaSerieDeOtroTipo400EnSuCampo()
+    public async Task Series_SoloElAdministradorEligeLaDeRegistro_LaDeBorradorNuncaSeElige_400_403_409()
     {
-        var client = Admin();
-        var socio = await CrearSocioAsync(client, "Cliente series elegidas");
-        var (serieBorrador, _, prefijo) = await SeriesPrueba.CrearAsync(_fixture.AppConnectionString, TipoDocumentoSerie.BorradorFacturaVenta);
+        var admin = Admin();
+        var socio = await CrearSocioAsync(admin, "Cliente series alta rapida");
+        var (serieBorrador, _, _) = await SeriesPrueba.CrearAsync(_fixture.AppConnectionString, TipoDocumentoSerie.BorradorFacturaVenta);
         var (serieRegistro, _, _) = await SeriesPrueba.CrearAsync(_fixture.AppConnectionString, TipoDocumentoSerie.FacturaVenta);
 
-        var borrador = await CrearBorradorOkAsync(client, new { socioNegocioId = socio, serieBorradorId = serieBorrador, serieRegistroId = serieRegistro });
-
-        Assert.Equal(($"{prefijo}000001", serieBorrador, serieRegistro), (borrador.Numero, borrador.SerieBorradorId, borrador.SerieRegistroId));
+        // La de borradores nunca se elige (tampoco el Administrador); una de registro de otro tipo -> 400 en su campo.
         await AssertErrorAsync(
-            await client.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieRegistroId = serieBorrador }),
+            await admin.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieBorradorId = serieBorrador }),
+            HttpStatusCode.BadRequest, "serie", "SerieBorradorId");
+        await AssertErrorAsync(
+            await admin.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieRegistroId = serieBorrador }),
             HttpStatusCode.BadRequest, null, "SerieRegistroId");
 
-        // Modificar: la serie de registro se cambia con el PUT (otra del tipo de borrador -> 400 en su campo).
-        await AssertErrorAsync(
-            await client.PutAsJsonAsync($"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, serieRegistroId = serieBorrador }),
-            HttpStatusCode.BadRequest, null, "SerieRegistroId");
-        var modificado = await client.PutAsJsonAsync(
+        // El Administrador elige la de registro en el alta y la cambia en la modificación.
+        var borrador = await CrearBorradorOkAsync(admin, new { socioNegocioId = socio, serieRegistroId = serieRegistro });
+        Assert.Equal((SerieFacturaVentaIds.SerieBorradorId, serieRegistro), (borrador.SerieBorradorId, borrador.SerieRegistroId));
+        var cambiado = await admin.PutAsJsonAsync(
             $"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, serieRegistroId = SerieFacturaVentaIds.SeriePosteadaId });
-        Assert.True(modificado.IsSuccessStatusCode, await modificado.Content.ReadAsStringAsync());
-        var leido = await GetBorradorAsync(client, borrador.Id);
-        Assert.Equal(("FV", SerieFacturaVentaIds.SeriePosteadaId), (leido.SerieRegistroCodigo, leido.SerieRegistroId));
+        Assert.True(cambiado.IsSuccessStatusCode, await cambiado.Content.ReadAsStringAsync());
+
+        // 409: el xmin que vio el Administrador ya no vale.
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await admin.PutAsJsonAsync($"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, serieRegistroId = serieRegistro })).StatusCode);
+
+        // Ejecutor (CanAdd): alta con serie de registro -> 400. Supervisor (CanModify, sin CanAdd): alta -> 403; modificación con serie -> 400.
+        var ejecutor = Rol("Ejecutor");
+        await AssertErrorAsync(
+            await ejecutor.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieRegistroId = serieRegistro }),
+            HttpStatusCode.BadRequest, "administrador", "SerieRegistroId");
+        var supervisor = Rol("Supervisor");
+        Assert.Equal(HttpStatusCode.Forbidden, (await supervisor.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio })).StatusCode);
+        var leido = await GetBorradorAsync(supervisor, borrador.Id);
+        await AssertErrorAsync(
+            await supervisor.PutAsJsonAsync($"{Base}/borradores/{leido.Id}", new { xmin = leido.Xmin, serieRegistroId = serieRegistro }),
+            HttpStatusCode.BadRequest, "administrador", "SerieRegistroId");
     }
 
     // ----- Helpers -----

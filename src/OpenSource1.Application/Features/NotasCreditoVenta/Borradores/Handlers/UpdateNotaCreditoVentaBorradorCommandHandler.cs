@@ -3,6 +3,7 @@ using OpenSource1.Application.Data;
 using OpenSource1.Application.Data.UnitOfWork;
 using OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Commands;
 using OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Dtos;
+using OpenSource1.Application.Services.Inventario;
 using OpenSource1.Core.Common;
 using OpenSource1.Core.Entities.Ventas;
 using OpenSource1.Core.Enums;
@@ -12,19 +13,25 @@ namespace OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Handlers
 /// <summary>
 /// Modificación de las fechas, la descripción y la serie de registro bajo el <c>FOR UPDATE</c> del borrador. Inexistente -&gt; 404;
 /// Posteada -&gt; 409 (<c>nota_credito_borrador.posteada.conflicto</c>); <c>Xmin</c> desactualizado -&gt; 409; fecha de registro
-/// anterior a la de la factura -&gt; 400; serie de registro nueva inexistente, de otro tipo o inactiva -&gt; 400 en
-/// <c>SerieRegistroId</c>.
+/// anterior a la de la factura -&gt; 400; serie de registro enviada por quien no es Administrador -&gt; 400 <c>serie.no_editable</c>
+/// (antes de abrir la transacción); serie de registro nueva inexistente, de otro tipo o inactiva -&gt; 400 en <c>SerieRegistroId</c>.
 /// </summary>
 public sealed class UpdateNotaCreditoVentaBorradorCommandHandler(
     IUnitOfWork unitOfWork,
     INotaCreditoVentaDatos datos,
     IGeneradorNumeroDocumento generadorNumero,
-    INotaCreditoVentaBorradorReadRepository readRepository)
+    INotaCreditoVentaBorradorReadRepository readRepository,
+    IUsuarioActual usuario)
     : IRequestHandler<UpdateNotaCreditoVentaBorradorCommand, Result<NotaCreditoVentaBorradorResponse>>
 {
     public async Task<Result<NotaCreditoVentaBorradorResponse>> Handle(
         UpdateNotaCreditoVentaBorradorCommand request, CancellationToken cancellationToken)
     {
+        if (NumeracionBorrador.ValidarSeriesSolicitadas(null, request.SerieRegistroId, usuario.EsAdministrador) is { } noEditable)
+        {
+            return Result<NotaCreditoVentaBorradorResponse>.Fallo(noEditable);
+        }
+
         string? descripcion = null;
         if (request.Descripcion is not null)
         {
