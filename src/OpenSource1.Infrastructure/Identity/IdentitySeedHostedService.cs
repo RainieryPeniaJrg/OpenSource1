@@ -82,6 +82,34 @@ public sealed class IdentitySeedHostedService(
 
             logger.LogInformation("Seeded user {UserName} (active={IsActive}).", userName, isActive);
         }
+        else if (seedOptions.Value.ResetPasswords && await userManager.IsLockedOutAsync(user))
+        {
+            await userManager.SetLockoutEndDateAsync(user, null);
+            await userManager.ResetAccessFailedCountAsync(user);
+            logger.LogInformation("Unlocked seed user {UserName}.", userName);
+        }
+
+        if (!await userManager.CheckPasswordAsync(user, password))
+        {
+            if (seedOptions.Value.ResetPasswords)
+            {
+                var token = await userManager.GeneratePasswordResetTokenAsync(user);
+                var reset = await userManager.ResetPasswordAsync(user, token, password);
+                if (!reset.Succeeded)
+                {
+                    throw new InvalidOperationException($"Failed to reset the password of seed user '{userName}': {string.Join(", ", reset.Errors.Select(error => error.Description))}");
+                }
+
+                logger.LogInformation("Reset the password of seed user {UserName} to UserSeed:DefaultPassword.", userName);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Seed user {UserName} already exists with a password different from UserSeed:DefaultPassword; it was not changed. " +
+                    "Set UserSeed:ResetPasswords=true (AUTH_SEED_RESET_PASSWORDS=true with docker compose) to reset it on startup.",
+                    userName);
+            }
+        }
 
         if (!await userManager.IsInRoleAsync(user, role))
         {
