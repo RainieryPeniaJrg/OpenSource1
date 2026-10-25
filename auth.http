@@ -1,4 +1,6 @@
 @baseUrl = http://localhost:8081
+# Contraseña de los usuarios iniciales: la de AUTH_SEED_DEFAULT_PASSWORD en .env (no la escriba aquí si va a commitear).
+@seedPassword = <AUTH_SEED_DEFAULT_PASSWORD>
 
 ### Register local user
 POST {{baseUrl}}/api/auth/register
@@ -25,7 +27,7 @@ Content-Type: application/json
 
 {
   "userNameOrEmail": "admin",
-  "password": "Password123"
+  "password": "{{seedPassword}}"
 }
 
 ### Current user

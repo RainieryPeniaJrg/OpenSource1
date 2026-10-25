@@ -182,11 +182,12 @@ Cuando la carga inicial de usuarios está habilitada, se crean estos usuarios:
 | `supervisor` | `Supervisor` |
 | `ejecutor` | `Ejecutor` |
 
-Contraseña de desarrollo usada para demostración:
+Su contraseña es la que se define en `AUTH_SEED_DEFAULT_PASSWORD` del archivo `.env` (con la plantilla, el valor de
+`.env.example`). Use un valor propio y no lo publique; la carga inicial es solo para desarrollo y demostración.
 
-```txt
-Password123
-```
+La contraseña solo se fija al **crear** cada usuario: si cambia `AUTH_SEED_DEFAULT_PASSWORD` después del primer arranque,
+los usuarios conservan la anterior (la API lo avisa en el log). Para aplicarla, ver
+[Problemas al levantar el proyecto](#problemas-al-levantar-el-proyecto).
 
 También existen usuarios de demostración adicionales para pruebas del módulo de usuarios.
 
@@ -247,19 +248,18 @@ Crear el archivo `.env` desde la plantilla:
 cp .env.example .env
 ```
 
-Variables requeridas:
+Variables:
 
-```env
-POSTGRES_PASSWORD=Change_this_postgres_password_12345
-JWT_SIGNING_KEY=Change_this_local_jwt_signing_key_1234567890
-AUTH_SEED_DEFAULT_PASSWORD=Change_this_seed_password_12345
-```
+| Variable | Uso |
+| --- | --- |
+| `POSTGRES_PASSWORD` | Contraseña del usuario de PostgreSQL (requerida). Solo se aplica al crear el volumen `postgres-data`. |
+| `JWT_SIGNING_KEY` | Clave de firma del JWT, mínimo 32 caracteres aleatorios (requerida). |
+| `AUTH_SEED_DEFAULT_PASSWORD` | Contraseña para iniciar sesión con los usuarios iniciales (requerida; 8+ caracteres con mayúscula, minúscula y dígito). |
+| `AUTH_SEED_RESET_PASSWORDS` | `true` para que la API vuelva a poner `AUTH_SEED_DEFAULT_PASSWORD` a los usuarios iniciales al arrancar (por defecto `false`). |
+| `POSTGRES_PORT` | Puerto del host para PostgreSQL (por defecto `5432`). |
 
-Para usar los usuarios iniciales documentados:
-
-```env
-AUTH_SEED_DEFAULT_PASSWORD=Password123
-```
+Defina los valores **antes** del primer `docker compose up`: las dos contraseñas se graban en la base de datos la primera
+vez.
 
 No subir el archivo `.env` real al repositorio.
 
@@ -301,11 +301,14 @@ arriba también aplican aquí (misma `UserSecretsId`, no hace falta repetir el c
 
 ## Ejecución con Docker Compose
 
-Levantar el sistema:
+Levantar el sistema construyendo las imágenes desde el código del repositorio:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
+
+Sin `--build`, en una máquina nueva Compose descarga las imágenes publicadas en Docker Hub, que pueden no corresponder al
+código que tiene en el clon.
 
 Servicios disponibles:
 
@@ -399,7 +402,7 @@ Probar login desde la API:
 ```bash
 curl -X POST http://localhost:8081/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"userNameOrEmail":"admin","password":"Password123"}'
+  -d '{"userNameOrEmail":"admin","password":"<AUTH_SEED_DEFAULT_PASSWORD>"}'
 ```
 
 Abrir la interfaz:
@@ -413,6 +416,17 @@ Documentación interactiva de la API:
 ```txt
 http://localhost:8081/scalar/v1
 ```
+
+## Problemas al levantar el proyecto
+
+| Síntoma | Causa | Solución |
+| --- | --- | --- |
+| El login responde "credenciales inválidas" con la contraseña de `.env` | Los usuarios iniciales ya existían con otra contraseña (se cambió `AUTH_SEED_DEFAULT_PASSWORD` después del primer arranque). El log de la API lo indica con "already exists with a password different". | Poner `AUTH_SEED_RESET_PASSWORDS=true` en `.env` y ejecutar `docker compose up -d api`; después volver a `false`. |
+| El login dice "Cuenta bloqueada temporalmente por múltiples intentos fallidos" | Tres intentos fallidos bloquean la cuenta 5 minutos (también con la contraseña correcta). | Esperar 5 minutos, o poner `AUTH_SEED_RESET_PASSWORDS=true` y ejecutar `docker compose up -d api`, que también desbloquea los usuarios iniciales. |
+| La API se detiene con "PostgreSQL rejected the password … (28P01)" | Se cambió `POSTGRES_PASSWORD` después de crear el volumen `postgres-data`; PostgreSQL conserva la contraseña original. | Volver a poner en `.env` la contraseña original, o recrear el volumen con `docker compose down -v` (borra todos los datos) y `docker compose up -d --build`. |
+| "Set POSTGRES_PASSWORD in a local .env file" | Falta el archivo `.env`. | `cp .env.example .env` y ajustar los valores. |
+
+Ver el log de la API: `docker compose logs api`.
 
 ## Docker Hub
 
