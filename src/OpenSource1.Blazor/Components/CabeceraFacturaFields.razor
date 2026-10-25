@@ -1,47 +1,15 @@
-@using OpenSource1.Application.Features.Almacenes.Dtos
-@using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos
-@using OpenSource1.Application.Features.Series.Dtos
-@using OpenSource1.Application.Features.SociosNegocio.Dtos
 @using OpenSource1.Blazor.Components.Pages
 
-@* Campos de la cabecera de un borrador de factura, compartidos por el alta (/facturas-venta/nueva, Vigente = null) y la
-   cabecera editable de la página única (/facturas-venta/borradores/{id}, Vigente = borrador guardado). Va dentro del EditForm.
-   Series (spec no-series): en el alta, serie de borrador y de registro con "— La configurada —"; en la cabecera, solo la de
-   registro (conserva la actual aunque ya no esté activa o la carga falle, F7) con el próximo número. *@
+@* Campos editables de la factura en preparación (spec alta rápida): fechas, vencimiento y descripción; cliente, almacén y series se
+   muestran en solo lectura (DatosDerivados / NumeracionRegistro). Va dentro del EditForm de la cabecera. *@
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="cabecera-factura-fields">
-    @if (!SocioBloqueado)
-    {
-        <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_SocioNegocioId")">Vender a <span class="text-red-500">*</span></label>
-            <select id="@($"{Prefix}_SocioNegocioId")" name="@($"{Prefix}.SocioNegocioId")" class="@VentasCss.Input">
-                <option value="" selected="@(Model.SocioNegocioId is null)">— Seleccione —</option>
-                @OpcionSocioVigente(Model.SocioNegocioId, Vigente?.SocioNegocioId, Vigente?.SocioNegocioCodigo, Vigente?.SocioNegocioNombre)
-                @foreach (var s in Socios)
-                {
-                    <option value="@s.Id" selected="@(s.Id == Model.SocioNegocioId)">@s.Codigo — @s.NombreComercial</option>
-                }
-            </select>
-            <ValidationMessage For="() => Model.SocioNegocioId" />
-        </div>
-    }
     <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_SocioNegocioFacturarAId")">Facturar a</label>
-        <select id="@($"{Prefix}_SocioNegocioFacturarAId")" name="@($"{Prefix}.SocioNegocioFacturarAId")" class="@VentasCss.Input">
-            <option value="" selected="@(Model.SocioNegocioFacturarAId is null)">— Igual que vender a —</option>
-            @OpcionSocioVigente(Model.SocioNegocioFacturarAId, Vigente?.SocioNegocioFacturarAId, Vigente?.SocioNegocioFacturarACodigo, Vigente?.NombreFacturacion)
-            @foreach (var s in Socios)
-            {
-                <option value="@s.Id" selected="@(s.Id == Model.SocioNegocioFacturarAId)">@s.Codigo — @s.NombreComercial</option>
-            }
-        </select>
-    </div>
-    <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_FechaRegistroTexto")">@($"Fecha de registro{Obligatoria}")</label>
+        <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_FechaRegistroTexto")">Fecha de registro *</label>
         <input id="@($"{Prefix}_FechaRegistroTexto")" type="date" name="@($"{Prefix}.FechaRegistroTexto")" value="@Model.FechaRegistroTexto" class="@VentasCss.Input" />
         <ValidationMessage For="() => Model.FechaRegistroTexto" />
     </div>
     <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_FechaDocumentoTexto")">@($"Fecha de documento{Obligatoria}")</label>
+        <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_FechaDocumentoTexto")">Fecha de documento *</label>
         <input id="@($"{Prefix}_FechaDocumentoTexto")" type="date" name="@($"{Prefix}.FechaDocumentoTexto")" value="@Model.FechaDocumentoTexto" class="@VentasCss.Input" />
         <ValidationMessage For="() => Model.FechaDocumentoTexto" />
     </div>
@@ -51,96 +19,17 @@
         <ValidationMessage For="() => Model.FechaVencimientoTexto" />
     </div>
     <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_AlmacenId")">Almacén</label>
-        <select id="@($"{Prefix}_AlmacenId")" name="@($"{Prefix}.AlmacenId")" class="@VentasCss.Input">
-            @if (EsAlta)
-            {
-                <option value="" selected="@(Model.AlmacenId is null)">— Predeterminado —</option>
-            }
-            @if (Model.AlmacenId is { } almacenId && Almacenes.All(a => a.Id != almacenId))
-            {
-                <option value="@almacenId" selected="selected">@(Vigente?.AlmacenId == almacenId && Vigente?.AlmacenCodigo is not null ? $"{Vigente.AlmacenCodigo} (no disponible)" : $"Almacén no disponible ({almacenId})")</option>
-            }
-            @foreach (var a in Almacenes)
-            {
-                <option value="@a.Id" selected="@(a.Id == Model.AlmacenId)">@a.Codigo — @a.Nombre</option>
-            }
-        </select>
-    </div>
-    @if (SeriesBorrador is not null)
-    {
-        <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_SerieBorradorId")">Serie de borrador</label>
-            <SelectorSerie Id="@($"{Prefix}_SerieBorradorId")" Name="@($"{Prefix}.SerieBorradorId")" Series="@SeriesBorrador"
-                           Seleccion="@Model.SerieBorradorId" OpcionConfigurada="true" CargaFallida="@SeriesCargaFallida" />
-        </div>
-    }
-    @if (SeriesRegistro is not null)
-    {
-        <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_SerieRegistroId")">Serie de registro</label>
-            <SelectorSerie Id="@($"{Prefix}_SerieRegistroId")" Name="@($"{Prefix}.SerieRegistroId")" Series="@SeriesRegistro"
-                           Seleccion="@Model.SerieRegistroId" VigenteId="@Vigente?.SerieRegistroId" VigenteCodigo="@Vigente?.SerieRegistroCodigo"
-                           OpcionConfigurada="@EsAlta" CargaFallida="@SeriesCargaFallida" />
-            @if (Proximo is not null)
-            {
-                <div class="mt-1"><SerieNumeracionInfo Codigo="@Vigente?.SerieRegistroCodigo" ProximoNumero="@Proximo.Numero" Aviso="@Proximo.Aviso" Error="@Proximo.Error" /></div>
-            }
-        </div>
-    }
-    <div class="sm:col-span-2">
         <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_Descripcion")">Descripción</label>
         <input id="@($"{Prefix}_Descripcion")" type="text" name="@($"{Prefix}.Descripcion")" value="@Model.Descripcion" maxlength="200" class="@VentasCss.Input" />
         <ValidationMessage For="() => Model.Descripcion" />
     </div>
 </div>
-<p class="mt-2 text-xs text-slate-400">
-    @(EsAlta
-        ? "Fechas vacías: registro = hoy, documento = registro, vencimiento = documento + días del término de pago del cliente."
-        : "Si cambia la fecha de documento y deja el vencimiento como estaba, la API lo recalcula con el término de pago.")
-</p>
+<p class="mt-2 text-xs text-slate-400">Si cambia la fecha de documento y deja el vencimiento como estaba, la API lo recalcula con el término de pago.</p>
 
 @code {
-    /// <summary>Formulario enlazado (AddInput en el alta, UpdateInput en la cabecera).</summary>
+    /// <summary>Formulario enlazado (UpdateInput de la factura en preparación).</summary>
     [Parameter, EditorRequired] public FacturasVentaBorradores.BorradorForm Model { get; set; } = default!;
 
     /// <summary>Prefijo de los <c>name</c>/<c>id</c>: debe coincidir con la propiedad <c>[SupplyParameterFromForm]</c> de la página.</summary>
     [Parameter, EditorRequired] public string Prefix { get; set; } = default!;
-
-    [Parameter] public IReadOnlyList<SocioNegocioResponse> Socios { get; set; } = [];
-    [Parameter] public IReadOnlyList<AlmacenResponse> Almacenes { get; set; } = [];
-
-    /// <summary>
-    /// Cliente vender-a fijado por la página (alta con <c>?socioId=</c>): no se pinta su <c>&lt;select&gt;</c>; la página envía el
-    /// id en un campo oculto con el mismo <c>name</c> y muestra el cliente precargado.
-    /// </summary>
-    [Parameter] public bool SocioBloqueado { get; set; }
-
-    /// <summary>Borrador guardado en la modificación de cabecera; null en el alta.</summary>
-    [Parameter] public FacturaVentaBorradorResponse? Vigente { get; set; }
-
-    /// <summary>Series activas de facturas (null = sin selector de serie de registro).</summary>
-    [Parameter] public IReadOnlyList<SerieResponse>? SeriesRegistro { get; set; }
-
-    /// <summary>Series activas de borradores; solo en el alta (null = sin selector).</summary>
-    [Parameter] public IReadOnlyList<SerieResponse>? SeriesBorrador { get; set; }
-
-    /// <summary>La carga de series falló (F7): no bloquea guardar; el selector conserva y rotula la serie actual.</summary>
-    [Parameter] public bool SeriesCargaFallida { get; set; }
-
-    /// <summary>Próximo número de la serie de registro vigente (vista previa, solo en la cabecera de un borrador).</summary>
-    [Parameter] public ProximoVista? Proximo { get; set; }
-
-    private bool EsAlta => Vigente is null;
-    private string Obligatoria => EsAlta ? "" : " *";
-
-    // El socio seleccionado se ofrece SIEMPRE aunque no esté entre los resultados de la búsqueda: sin esto el <select> no
-    // reflejaría la elección (o el socio guardado) y guardar la cambiaría en silencio.
-    private RenderFragment OpcionSocioVigente(Guid? seleccion, Guid? vigenteId, string? codigo, string? nombre) => __builder =>
-    {
-        if (seleccion is { } id && Socios.All(s => s.Id != id))
-        {
-            <option value="@id" selected="selected">@(vigenteId == id && !string.IsNullOrWhiteSpace(codigo) ? $"{codigo} — {nombre}" : $"Cliente seleccionado ({id})")</option>
-        }
-    };
 }

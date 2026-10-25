@@ -19,6 +19,12 @@ public interface IFacturaVentaApiClient
     Task<PagedResult<FacturaVentaBorradorResponse>> ListBorradoresAsync(
         FacturaVentaBorradorFiltro? filtro = null, PageRequest? paginacion = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Facturas en preparación (borradores Abierta y Liberada) para la pestaña "En preparación (n)": el <c>Total</c> de una página de
+    /// tamaño 1 del listado existente. Un error de la API lanza <see cref="HttpRequestException"/> (la página muestra la pestaña sin número).
+    /// </summary>
+    Task<long> ContarEnPreparacionAsync(CancellationToken cancellationToken = default);
+
     Task<FacturaVentaBorradorResponse?> GetBorradorAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<VentaOperationResult<FacturaVentaBorradorResponse>> CreateBorradorAsync(BorradorCabeceraInput input, CancellationToken cancellationToken = default);
@@ -76,6 +82,7 @@ public sealed record FacturaVentaBorradorFiltro(string? Numero, string? NombreFa
 /// valores por defecto de la API. En la modificación la página envía siempre ambos socios.
 /// Series (spec no-series): en el alta, null = la serie configurada del tipo (<c>SerieBorradorId</c> numera el borrador,
 /// <c>SerieRegistroId</c> numerará la factura al postear); en la modificación solo viaja <c>SerieRegistroId</c> (null = conservar).
+/// <c>PrimeraLinea</c> (solo en el alta) — alta rápida: primera línea guardada con la cabecera en una transacción; Blazor siempre la envía.
 /// </summary>
 public sealed record BorradorCabeceraInput(
     Guid SocioNegocioId,
@@ -86,7 +93,8 @@ public sealed record BorradorCabeceraInput(
     Guid? AlmacenId,
     string? Descripcion,
     Guid? SerieBorradorId = null,
-    Guid? SerieRegistroId = null);
+    Guid? SerieRegistroId = null,
+    LineaFacturaInput? PrimeraLinea = null);
 
 /// <summary>
 /// Cuerpo de alta/modificación de una línea (reemplazo completo). Los campos que no aplican al <see cref="Tipo"/> deben ir nulos:

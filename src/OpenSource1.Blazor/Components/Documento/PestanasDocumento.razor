@@ -1,0 +1,22 @@
+@* Pestañas "Registradas" / "En preparación (n)" de las listas de facturas y notas (spec alta rápida, Parte 2): enlaces GET con
+   aria-current; n es el conteo de la API (ContarEnPreparacionAsync), sin número si no cargó. *@
+<nav aria-label="Estado de los documentos" class="mb-6 border-b border-slate-200 dark:border-slate-700" data-testid="pestanas-documento">
+    <ul class="-mb-px flex gap-4 text-sm font-semibold">
+        <li><a href="@Base" aria-current="@(EnPreparacion ? null : "page")" class="@Clase(!EnPreparacion)" data-testid="pestana-registradas">Registradas</a></li>
+        <li><a href="@($"{Base}?estado=preparacion")" aria-current="@(EnPreparacion ? "page" : null)" class="@Clase(EnPreparacion)" data-testid="pestana-preparacion">@TextoPreparacion</a></li>
+    </ul>
+</nav>
+
+@code {
+    /// <summary>Ruta de la lista (<c>/facturas-venta</c> o <c>/notas-credito-venta</c>).</summary>
+    [Parameter, EditorRequired] public string Base { get; set; } = string.Empty;
+    [Parameter] public bool EnPreparacion { get; set; }
+    /// <summary>Documentos en preparación; null = no cargó (la pestaña se muestra sin número).</summary>
+    [Parameter] public long? Conteo { get; set; }
+
+    private string TextoPreparacion => Conteo is { } n ? $"En preparación ({n})" : "En preparación";
+
+    private static string Clase(bool activa) => activa
+        ? "inline-block border-b-2 border-brand-600 px-1 pb-2 text-brand-700"
+        : "inline-block border-b-2 border-transparent px-1 pb-2 text-slate-500 hover:text-slate-700";
+}

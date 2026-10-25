@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 
 namespace OpenSource1.Blazor.Components;
@@ -32,6 +33,25 @@ public static class EntradaFecha
 
         error = $"{etiqueta} no es válida.";
         return false;
+    }
+
+    /// <summary>Fecha opcional de un formulario: la fecha si el texto es válido; vacío o inválido = <see langword="null"/>.</summary>
+    public static DateOnly? Opcional(string? texto) => TryParse(texto, out var valor, out _) ? valor : null;
+
+    /// <summary>
+    /// Validación de las fechas de un formulario (<c>IValidatableObject.Validate</c>): un <see cref="ValidationResult"/> por cada
+    /// fecha informada que no es válida ("{etiqueta} no es válida.", sobre <c>campo</c>). Las vacías no fallan (la obligatoriedad
+    /// la valida el formulario).
+    /// </summary>
+    public static IEnumerable<ValidationResult> Validar(params (string? Texto, string Campo, string Etiqueta)[] fechas)
+    {
+        foreach (var (texto, campo, etiqueta) in fechas)
+        {
+            if (!string.IsNullOrWhiteSpace(texto) && !TryParse(texto, out _, out var error, etiqueta))
+            {
+                yield return new ValidationResult(error ?? $"{etiqueta} no es válida.", [campo]);
+            }
+        }
     }
 
     /// <summary>Formato de edición esperado por <c>&lt;input type="date"&gt;</c>.</summary>

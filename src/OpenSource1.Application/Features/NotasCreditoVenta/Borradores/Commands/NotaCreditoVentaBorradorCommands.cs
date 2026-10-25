@@ -9,9 +9,10 @@ namespace OpenSource1.Application.Features.NotasCreditoVenta.Borradores.Commands
 /// factura los socios, el snapshot de facturación, los grupos y la CxC congelada. <c>FechaRegistro</c> <see langword="null"/> = hoy
 /// (UTC), nunca anterior a la de la factura; <c>FechaDocumento</c> <see langword="null"/> = <c>FechaRegistro</c>. Con
 /// <c>CopiarLineas</c>, crea una línea por cada línea de la factura con cantidad pendiente de acreditar, por todo lo pendiente
-/// (nota total), con <c>DevolverInventario</c> en las de Producto. El número sale de <c>SerieBorradorId</c> (o de la serie configurada
-/// para <c>BorradorNotaCreditoVenta</c>); <c>SerieRegistroId</c> (o la configurada para <c>NotaCreditoVenta</c>) numerará la nota al
-/// postear.
+/// (nota total), con <c>DevolverInventario</c> en las de Producto. <c>SerieBorradorId</c> no se admite (400 <c>serie.no_editable</c>:
+/// se usa la serie configurada); <c>SerieRegistroId</c> solo la envía el Administrador (si no, 400 <c>serie.no_editable</c>);
+/// <see langword="null"/> = la configurada (alta) o conservar (modificación). La de borradores da el número del borrador y la de
+/// registro numerará la nota al postear.
 /// </summary>
 public sealed record CreateNotaCreditoVentaBorradorCommand(
     string FacturaVentaNumero,
@@ -24,8 +25,11 @@ public sealed record CreateNotaCreditoVentaBorradorCommand(
     Guid? SerieRegistroId = null) : IRequest<Result<NotaCreditoVentaBorradorResponse>>;
 
 /// <summary>
-/// Modificación de la cabecera: fechas, descripción y serie de registro ("null = conservar"; <c>Descripcion</c> "" = limpiar). La
-/// factura, los socios y los grupos no cambian. <c>Xmin</c> obligatorio (409 si no coincide). Solo mientras esté Abierta.
+/// Modificación de la cabecera: fechas, descripción y serie de registro ("null = conservar"; <c>Descripcion</c> "" = limpiar).
+/// <c>SerieBorradorId</c> no se admite (400 <c>serie.no_editable</c>: se usa la serie configurada); <c>SerieRegistroId</c> solo la
+/// envía el Administrador (si no, 400 <c>serie.no_editable</c>); <see langword="null"/> = la configurada (alta) o conservar
+/// (modificación). La factura, los socios y los grupos no cambian. <c>Xmin</c> obligatorio (409 si no coincide). Solo mientras
+/// esté Abierta.
 /// </summary>
 public sealed record UpdateNotaCreditoVentaBorradorCommand(
     Guid Id, DateOnly? FechaRegistro, DateOnly? FechaDocumento, string? Descripcion, long Xmin, Guid? SerieRegistroId = null)

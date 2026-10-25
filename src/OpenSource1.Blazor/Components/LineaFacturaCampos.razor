@@ -1,0 +1,110 @@
+@using OpenSource1.Application.Features.Almacenes.Dtos
+@using OpenSource1.Application.Features.CuentasContables.Dtos
+@using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos
+@using OpenSource1.Core.Enums
+@* Campos de una línea de factura (tipo oculto, almacén de la línea, cuenta y grupo de IVA, cantidad, precio, descuento y descripción),
+   compartidos por el alta rápida (/facturas-venta/nueva, Prefix="AltaInput") y la fila de alta/edición de la factura en preparación
+   (Prefix="AddInput"/"UpdateInputLinea"). Va DENTRO del EditForm de la página: los ValidationMessage usan el mismo Model. *@
+<input type="hidden" name="@($"{Prefix}.Tipo")" value="@((short)Tipo)" />
+@if (OpcionesFallidas)
+{
+    <div class="mb-4"><MessageBox Type="danger" Message="No fue posible cargar las opciones de la línea (almacenes, cuentas o grupos de IVA). No se puede guardar hasta que carguen; recargue la página." /></div>
+}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    @if (Tipo == TipoLineaFactura.Producto)
+    {
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_AlmacenId")">Almacén</label>
+            <select id="@($"{Prefix}_AlmacenId")" name="@($"{Prefix}.AlmacenId")" class="@VentasCss.Input">
+                <option value="" selected="@(Model.AlmacenId is null)">— El de la cabecera (@AlmacenCabeceraCodigo) —</option>
+                @if (Model.AlmacenId is { } almacenId && Almacenes.All(a => a.Id != almacenId))
+                {
+                    <option value="@almacenId" selected="selected">@(Vigente?.AlmacenId == almacenId && Vigente.AlmacenCodigo is not null ? $"{Vigente.AlmacenCodigo} (no disponible)" : $"Almacén no disponible ({almacenId})")</option>
+                }
+                @foreach (var a in Almacenes)
+                {
+                    <option value="@a.Id" selected="@(a.Id == Model.AlmacenId)">@a.Codigo — @a.Nombre</option>
+                }
+            </select>
+        </div>
+    }
+    @if (Tipo == TipoLineaFactura.CuentaContable)
+    {
+        <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_CuentaContableId")">Cuenta contable <span class="text-red-500">*</span></label>
+            <select id="@($"{Prefix}_CuentaContableId")" name="@($"{Prefix}.CuentaContableId")" class="@VentasCss.Input">
+                <option value="" selected="@(Model.CuentaContableId is null)">— Seleccione —</option>
+                @if (Model.CuentaContableId is { } cuentaId && Cuentas.All(c => c.Id != cuentaId))
+                {
+                    <option value="@cuentaId" selected="selected">@(Vigente?.CuentaContableId == cuentaId && Vigente.CuentaContableNumero is not null ? $"{Vigente.CuentaContableNumero} (no elegible)" : $"Cuenta no disponible ({cuentaId})")</option>
+                }
+                @foreach (var c in Cuentas)
+                {
+                    <option value="@c.Id" selected="@(c.Id == Model.CuentaContableId)">@c.Numero — @c.Nombre</option>
+                }
+            </select>
+            <ValidationMessage For="() => Model.CuentaContableId" />
+            <p class="mt-1 text-xs text-slate-400">Solo cuentas de posteo, no bloqueadas y de posteo directo.</p>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_GrupoIvaProductoId")">Grupo de IVA de producto <span class="text-red-500">*</span></label>
+            <select id="@($"{Prefix}_GrupoIvaProductoId")" name="@($"{Prefix}.GrupoIvaProductoId")" class="@VentasCss.Input">
+                <option value="" selected="@(Model.GrupoIvaProductoId is null)">— Seleccione —</option>
+                @if (Model.GrupoIvaProductoId is { } grupoId && GruposIva.All(g => g.Id != grupoId))
+                {
+                    <option value="@grupoId" selected="selected">Grupo no disponible (@grupoId)</option>
+                }
+                @foreach (var g in GruposIva)
+                {
+                    <option value="@g.Id" selected="@(g.Id == Model.GrupoIvaProductoId)">@g.Rotulo</option>
+                }
+            </select>
+            <ValidationMessage For="() => Model.GrupoIvaProductoId" />
+        </div>
+    }
+    @if (Tipo != TipoLineaFactura.Comentario)
+    {
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_CantidadTexto")">Cantidad <span class="text-red-500">*</span></label>
+            <input id="@($"{Prefix}_CantidadTexto")" type="text" inputmode="decimal" name="@($"{Prefix}.CantidadTexto")" value="@Model.CantidadTexto" class="@VentasCss.Input" />
+            <ValidationMessage For="() => Model.CantidadTexto" />
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_PrecioUnitarioTexto")">Precio unitario <span class="text-red-500">*</span></label>
+            <input id="@($"{Prefix}_PrecioUnitarioTexto")" type="text" inputmode="decimal" name="@($"{Prefix}.PrecioUnitarioTexto")" value="@Model.PrecioUnitarioTexto"
+                   aria-describedby="@($"{Prefix}_PrecioAyuda")" class="@VentasCss.Input" />
+            <ValidationMessage For="() => Model.PrecioUnitarioTexto" />
+            <p id="@($"{Prefix}_PrecioAyuda")" class="mt-1 text-xs text-slate-400" data-testid="ayuda-precio">Mayor que cero; @LineaFacturaForm.AyudaRegalo.</p>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_PorcentajeDescuentoTexto")">Descuento %</label>
+            <input id="@($"{Prefix}_PorcentajeDescuentoTexto")" type="text" inputmode="decimal" name="@($"{Prefix}.PorcentajeDescuentoTexto")" value="@Model.PorcentajeDescuentoTexto" placeholder="0" class="@VentasCss.Input" />
+            <ValidationMessage For="() => Model.PorcentajeDescuentoTexto" />
+        </div>
+    }
+    <div class="@(Tipo == TipoLineaFactura.Comentario ? "sm:col-span-2 lg:col-span-4" : "sm:col-span-2")">
+        <label class="block text-sm font-medium text-slate-700 mb-1" for="@($"{Prefix}_Descripcion")">Descripción de la línea@(Tipo == TipoLineaFactura.Comentario ? " *" : "")</label>
+        <input id="@($"{Prefix}_Descripcion")" type="text" name="@($"{Prefix}.Descripcion")" value="@Model.Descripcion" maxlength="200"
+               placeholder="@(Tipo == TipoLineaFactura.Producto ? "Vacío = nombre del producto" : Tipo == TipoLineaFactura.CuentaContable ? "Vacío = nombre de la cuenta" : "")" class="@VentasCss.Input" />
+        <ValidationMessage For="() => Model.Descripcion" />
+    </div>
+</div>
+@if (Tipo == TipoLineaFactura.Producto)
+{
+    <p class="mt-2 text-xs text-slate-400">La línea usa la unidad base del producto.</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public LineaFacturaForm Model { get; set; } = default!;
+    /// <summary>Prefijo de los <c>name</c>/<c>id</c> (la propiedad <c>[SupplyParameterFromForm]</c> de la página).</summary>
+    [Parameter, EditorRequired] public string Prefix { get; set; } = string.Empty;
+    [Parameter] public TipoLineaFactura Tipo { get; set; } = TipoLineaFactura.Producto;
+    /// <summary>Línea guardada (edición), para rotular almacén o cuenta que ya no están entre las opciones.</summary>
+    [Parameter] public LineaFacturaVentaBorradorResponse? Vigente { get; set; }
+    [Parameter] public IReadOnlyList<AlmacenResponse> Almacenes { get; set; } = [];
+    [Parameter] public IReadOnlyList<CuentaContableResponse> Cuentas { get; set; } = [];
+    [Parameter] public IReadOnlyList<GrupoOpcion> GruposIva { get; set; } = [];
+    /// <summary>Código del almacén de la cabecera (el predeterminado), para la opción vacía de la línea.</summary>
+    [Parameter] public string? AlmacenCabeceraCodigo { get; set; }
+    [Parameter] public bool OpcionesFallidas { get; set; }
+}

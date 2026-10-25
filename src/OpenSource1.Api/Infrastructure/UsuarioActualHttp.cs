@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using OpenSource1.Application.Security;
 using OpenSource1.Application.Services.Inventario;
 
 namespace OpenSource1.Api.Infrastructure;
@@ -23,4 +24,7 @@ public sealed class UsuarioActualHttp(IHttpContextAccessor httpContextAccessor) 
 
     public Guid? Id =>
         Guid.TryParse(Usuario?.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    /// <summary>Rol <see cref="ApplicationRoles.Administrator"/> en el JWT (la política <c>CanAdministrar</c> exige ese rol).</summary>
+    public bool EsAdministrador => Usuario?.IsInRole(ApplicationRoles.Administrator) == true;
 }

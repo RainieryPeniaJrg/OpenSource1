@@ -83,7 +83,7 @@ public sealed class CopiarFacturaABorradorCommandHandler(
         // Series configuradas (ruling F10: el mismo helper que el alta de borradores).
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
         var series = await generadorNumero.NumerarBorradorAsync(
-            TipoDocumentoSerie.BorradorFacturaVenta, TipoDocumentoSerie.FacturaVenta, null, null, hoy, cancellationToken);
+            TipoDocumentoSerie.BorradorFacturaVenta, TipoDocumentoSerie.FacturaVenta, null, hoy, cancellationToken);
         if (!series.TryObtenerValor(out var numeradas))
         {
             return Result<CopiaFacturaResponse>.Fallo(series);

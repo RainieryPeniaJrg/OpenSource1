@@ -170,4 +170,26 @@ public sealed class LineaFacturaFormularioTests
 
         Assert.Contains(Validar(form), r => r.MemberNames.Contains(nameof(LineaFacturaForm.PorcentajeDescuentoTexto)));
     }
+
+    [Fact]
+    public void AltaFactura_ValidaLaLineaYLasFechas_YEnviaLaCabeceraConLaPrimeraLinea()
+    {
+        var form = new AltaFacturaForm
+        {
+            SocioNegocioId = Guid.NewGuid(), Tipo = (short)TipoLineaFactura.Comentario, Descripcion = "Servicio",
+            FechaRegistroTexto = "2026-10-01", FechaVencimientoTexto = "no-es-fecha", DescripcionDocumento = " Pedido 7 ", SerieRegistroId = Guid.NewGuid(),
+        };
+
+        var errores = Validar(form);
+        form.FechaVencimientoTexto = null;
+        var usuario = form.ToAlta(TipoLineaFactura.Comentario, null, null, esAdministrador: false);
+        var administrador = form.ToAlta(TipoLineaFactura.Comentario, null, null, esAdministrador: true);
+
+        Assert.Contains(errores, e => e.MemberNames.Contains(nameof(AltaFacturaForm.FechaVencimientoTexto)));
+        Assert.Equal(("Pedido 7", (Guid?)null, (Guid?)null), (usuario.Descripcion, usuario.AlmacenId, usuario.SerieRegistroId));
+        Assert.Null(usuario.SerieBorradorId);
+        Assert.Equal(form.SerieRegistroId, administrador.SerieRegistroId);
+        Assert.Equal((TipoLineaFactura.Comentario, "Servicio"), (usuario.PrimeraLinea!.Tipo, usuario.PrimeraLinea.Descripcion));
+        Assert.Equal(new DateOnly(2026, 10, 1), usuario.FechaRegistro);
+    }
 }

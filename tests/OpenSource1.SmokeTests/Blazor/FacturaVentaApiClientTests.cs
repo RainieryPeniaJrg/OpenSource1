@@ -37,6 +37,39 @@ public sealed class FacturaVentaApiClientTests
     }
 
     [Fact]
+    public async Task CreateBorrador_ConPrimeraLinea_EnviaLaLineaConElTipoComoEntero()
+    {
+        var handler = new Grabador(HttpStatusCode.Created, BorradorJson);
+        var client = new FacturaVentaApiClient(Http(handler), NullLogger<FacturaVentaApiClient>.Instance);
+        var socio = Guid.NewGuid();
+        var producto = Guid.NewGuid();
+
+        await client.CreateBorradorAsync(new BorradorCabeceraInput(
+            socio, null, null, null, null, null, null,
+            PrimeraLinea: new LineaFacturaInput(TipoLineaFactura.Producto, producto, null, null, null, null, 2m, 10m, null, null)));
+
+        Assert.EndsWith("api/facturas-venta/borradores", handler.Uri!.AbsolutePath);
+        using var cuerpo = JsonDocument.Parse(handler.Cuerpo!);
+        var linea = cuerpo.RootElement.GetProperty("primeraLinea");
+        Assert.Equal((1, producto, 2m), (linea.GetProperty("tipo").GetInt32(), linea.GetProperty("productoId").GetGuid(), linea.GetProperty("cantidad").GetDecimal()));
+        Assert.Equal(JsonValueKind.Null, cuerpo.RootElement.GetProperty("almacenId").ValueKind);
+    }
+
+    [Fact]
+    public async Task ContarEnPreparacion_PideUnaPaginaDeUno_SinEstado_YDevuelveElTotal()
+    {
+        var handler = new Grabador(HttpStatusCode.OK, """{"items":[],"pagina":1,"tamanoPagina":1,"total":7}""");
+        var client = new FacturaVentaApiClient(Http(handler), NullLogger<FacturaVentaApiClient>.Instance);
+
+        var total = await client.ContarEnPreparacionAsync();
+
+        Assert.Equal(7L, total);
+        Assert.EndsWith("api/facturas-venta/borradores", handler.Uri!.AbsolutePath);
+        Assert.Contains("tamanoPagina=1", handler.Uri.Query);
+        Assert.DoesNotContain("estado=", handler.Uri.Query);
+    }
+
+    [Fact]
     public async Task CreateLinea_EnviaElTipoComoEntero_ALaRutaDelBorrador()
     {
         var handler = new Grabador(HttpStatusCode.Created, "{}");

@@ -1,0 +1,15 @@
+@page "/facturas-venta/borradores/{BorradorId:guid}"
+@attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
+@using Microsoft.AspNetCore.Authorization
+@inject NavigationManager Nav
+
+@* Spec alta rápida: la ruta antigua de la factura en preparación (enlaces guardados y "Borrador de origen" de versiones anteriores)
+   redirige a /facturas-venta/en-preparacion/{id}, conservando un returnUrl local (uno externo cae a la lista). *@
+
+@code {
+    [Parameter] public Guid BorradorId { get; set; }
+    [SupplyParameterFromQuery(Name = "returnUrl")] private string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized() =>
+        Nav.NavigateTo(RutasPreparacion.Redireccion(RutasPreparacion.Factura, BorradorId, ReturnUrl, RutasPreparacion.ListaFacturas), replace: true);
+}

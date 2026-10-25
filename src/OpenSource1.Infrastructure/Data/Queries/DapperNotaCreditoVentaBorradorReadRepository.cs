@@ -28,6 +28,11 @@ public sealed class DapperNotaCreditoVentaBorradorReadRepository(IDbSession sess
                n."CuentaCxCId", c."Numero" AS "CuentaCxCNumero", n."Moneda", n."Descripcion",
                (SELECT COUNT(*) FROM "LineasNotaCreditoVentaBorrador" l
                 WHERE l."NotaCreditoVentaBorradorId" = n."Id" AND l."IsDeleted" = false)::int AS "NumeroLineas",
+               COALESCE((SELECT SUM(g."Base" + ROUND(g."Base" * g."PorcentajeIva" / 100, 2))
+                         FROM (SELECT ROUND(SUM(l."ImporteLinea"), 2) AS "Base", l."PorcentajeIva"
+                               FROM "LineasNotaCreditoVentaBorrador" l
+                               WHERE l."NotaCreditoVentaBorradorId" = n."Id" AND l."IsDeleted" = false AND l."Tipo" <> 3
+                               GROUP BY l."IdentificadorIva", l."PorcentajeIva") g), 0) AS "ImporteTotal",
                n."Estado", n."SerieBorradorId", sb."Codigo" AS "SerieBorradorCodigo",
                n."SerieRegistroId", sr."Codigo" AS "SerieRegistroCodigo", n."NotaCreditoVentaNumero",
                n.xmin::text::bigint AS "Xmin", n."CreatedAtUtc", n."UpdatedAtUtc", n."CreatedBy", n."UpdatedBy"

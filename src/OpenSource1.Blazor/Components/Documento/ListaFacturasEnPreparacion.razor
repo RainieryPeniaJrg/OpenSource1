@@ -1,0 +1,198 @@
+@using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos
+@using OpenSource1.Blazor.Services
+@using OpenSource1.Core.Enums
+@inject IFacturaVentaApiClient FacturaApiClient
+@inject ILogger<ListaFacturasEnPreparacion> Logger
+@inject NavigationManager Nav
+
+@* Pestaña "En preparación" de /facturas-venta (spec alta rápida, Parte 2): cliente, creado el, líneas, total (vista previa) y estado
+   como insignia de texto; "Continuar" abre la factura y "Descartar" (CanDelete, solo las abiertas: una heredada Liberada se reabre
+   antes en su página) pide confirmación. Los filtros, la página y deleteId llegan de la página como parámetros. El formulario de
+   descarte está siempre en el árbol (PF6: también en la pestaña "Registradas", con SoloFormulario): un POST obsoleto o forzado
+   recibe el mensaje real de la API; su ?ok=descartada se muestra en ambas pestañas. *@
+@if (ListaPreparacion.MensajeOk(Ok, "factura") is { } mensajeOk)
+{
+    <div class="mb-6"><ActionFeedback Type="success" Message="@mensajeOk" /></div>
+}
+@if (SoloFormulario)
+{
+    <ResumenErrores Mensaje="@error" Errores="@errores" />
+    <EditForm Model="DeleteInput" FormName="delete-borrador" OnValidSubmit="DescartarAsync"></EditForm>
+    return;
+}
+
+<ResumenErrores Mensaje="@error" Errores="@errores" />
+
+<div class="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <form method="get" action="/facturas-venta" data-enhance class="p-4 sm:p-6">
+        <input type="hidden" name="estado" value="preparacion" />
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div class="grid max-w-3xl flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-500" for="prepNombre">Cliente</label>
+                    <input id="prepNombre" type="text" name="nombre" value="@Nombre" placeholder="ej. Comercial" class="@VentasCss.Filtro" />
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-500" for="prepNumero">Número interno</label>
+                    <input id="prepNumero" type="text" name="numero" value="@Numero" class="@VentasCss.Filtro" />
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Consultar</button>
+                <a href="@RutasPreparacion.ListaFacturas" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Limpiar campos</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-6 py-4">
+        <h2 class="text-sm font-semibold text-slate-700">Facturas en preparación</h2>
+        <p class="mt-1 text-xs text-slate-500">@total resultado(s) · página @pagina de @Math.Max(totalPaginas, 1).</p>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm" data-testid="tabla-en-preparacion">
+            <thead class="bg-slate-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Cliente</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Creado el</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">Líneas</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">Total</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Estado</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50 bg-white">
+                @if (facturas.Count == 0)
+                {
+                    <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-slate-400">No hay facturas en preparación con esos criterios.</td></tr>
+                }
+                @foreach (var b in facturas)
+                {
+                    <tr @key="b.Id" class="hover:bg-slate-50">
+                        <td class="px-4 py-3 text-slate-700">@b.SocioNegocioCodigo <span class="text-xs text-slate-400">@b.NombreFacturacion</span></td>
+                        <td class="px-4 py-3 text-xs text-slate-500">@EntradaFecha.Formatear(DateOnly.FromDateTime(b.CreatedAtUtc))</td>
+                        <td class="px-4 py-3 text-right text-slate-700">@b.NumeroLineas</td>
+                        <td class="px-4 py-3 text-right font-semibold text-slate-800">@VentasOpciones.Importe(b.ImporteTotal)</td>
+                        <td class="px-4 py-3 text-xs"><span class="@EstadoCss(b.Estado)">@VentasOpciones.Estado(b.Estado)</span></td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="@($"{RutasPreparacion.Factura}/{b.Id}")" aria-label="@($"Continuar la factura de {b.NombreFacturacion}")" class="btn-press rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100">Continuar</a>
+                                @if (Permisos?.CanDelete == true && b.Estado == EstadoFacturaBorrador.Abierta)
+                                {
+                                    <a href="@Url(deleteId: b.Id)" aria-label="@($"Descartar la factura de {b.NombreFacturacion}")" class="btn-press rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Descartar</a>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (totalPaginas > 1)
+    {
+        <div class="flex items-center justify-between gap-3 border-t border-slate-100 px-6 py-4">
+            <p class="text-xs text-slate-500">Página @pagina de @totalPaginas</p>
+            <div class="flex items-center gap-2">
+                @if (pagina > 1)
+                {
+                    <a href="@Url(pagina: pagina - 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">« Anterior</a>
+                }
+                @if (pagina < totalPaginas)
+                {
+                    <a href="@Url(pagina: pagina + 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">Siguiente »</a>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@if (MuestraDialogo)
+{
+    <ConfirmDialog Title="Descartar factura" Message="Se descartará la factura en preparación con todas sus líneas. No se puede deshacer." Variant="danger" CancelHref="@Url()">
+        <p class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-900">@(aDescartar is null ? DeleteId?.ToString() : $"{aDescartar.NombreFacturacion} ({aDescartar.NumeroLineas} línea(s))")</p>
+        <EditForm Model="DeleteInput" FormName="delete-borrador" OnValidSubmit="DescartarAsync" class="mt-4">
+            <input type="hidden" name="DeleteInput.Id" value="@DeleteId" />
+            <button type="submit" class="btn-press rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Sí, descartar</button>
+            <a href="@Url()" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
+        </EditForm>
+    </ConfirmDialog>
+}
+else
+{
+    <EditForm Model="DeleteInput" FormName="delete-borrador" OnValidSubmit="DescartarAsync"></EditForm>
+}
+
+@code {
+    [Parameter] public string? Numero { get; set; }
+    [Parameter] public string? Nombre { get; set; }
+    [Parameter] public int Pagina { get; set; } = 1;
+    [Parameter] public Guid? DeleteId { get; set; }
+    [Parameter] public string? Ok { get; set; }
+    [Parameter] public PermisosPagina? Permisos { get; set; }
+
+    /// <summary>Pestaña "Registradas": solo el formulario de descarte (vacío) y su resumen de errores; no carga la lista.</summary>
+    [Parameter] public bool SoloFormulario { get; set; }
+
+    [SupplyParameterFromForm(FormName = "delete-borrador")] private DescartarDocumentoForm? DeleteInput { get; set; }
+
+    private IReadOnlyList<FacturaVentaBorradorResponse> facturas = [];
+    private FacturaVentaBorradorResponse? aDescartar;
+    private long total;
+    private int totalPaginas;
+    private int pagina = 1;
+    private string? error;
+    private IReadOnlyList<string> errores = [];
+
+    private bool MuestraDialogo => DeleteId.HasValue && Permisos?.CanDelete == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        DeleteInput ??= new();
+        if (SoloFormulario)
+        {
+            return;
+        }
+
+        try
+        {
+            var filtro = new FacturaVentaBorradorFiltro(ListaPreparacion.Vacio(Numero), ListaPreparacion.Vacio(Nombre), null, null);
+            var (resultado, paginaCargada) = await ListaPreparacion.CargarAsync(p => FacturaApiClient.ListBorradoresAsync(filtro, p), Pagina);
+            (facturas, total, totalPaginas, pagina) = (resultado.Items, resultado.Total, resultado.TotalPaginas, paginaCargada);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not load facturas en preparación.");
+            error = "No fue posible cargar las facturas en preparación.";
+        }
+
+        if (MuestraDialogo)
+        {
+            aDescartar = facturas.FirstOrDefault(f => f.Id == DeleteId);
+            if (aDescartar is null)
+            {
+                try { aDescartar = await FacturaApiClient.GetBorradorAsync(DeleteId!.Value); }
+                catch (Exception ex) { Logger.LogWarning(ex, "Could not load factura en preparación {Id} to discard.", DeleteId); }
+            }
+        }
+    }
+
+    private async Task DescartarAsync()
+    {
+        var (destino, mensaje, lista) = await ListaPreparacion.DescartarAsync(
+            () => FacturaApiClient.DeleteBorradorAsync(DeleteInput!.Id), Url(), Logger, "No fue posible descartar la factura.");
+        (error, errores) = (mensaje, lista);
+
+        // R17: la navegación va FUERA del try (dentro de ListaPreparacion.DescartarAsync).
+        if (destino is not null)
+        {
+            Nav.NavigateTo(destino);
+        }
+    }
+
+    private string Url(int? pagina = null, Guid? deleteId = null) =>
+        ListaPreparacion.Url(RutasPreparacion.ListaFacturas, [("numero", Numero), ("nombre", Nombre)], pagina ?? this.pagina, deleteId);
+
+    private static string EstadoCss(EstadoFacturaBorrador estado) =>
+        estado == EstadoFacturaBorrador.Liberada ? ListaPreparacion.CssEstadoLiberada : ListaPreparacion.CssEstadoAbierta;
+}

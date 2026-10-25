@@ -1,0 +1,43 @@
+@* Botones de la cabecera editable de un documento en preparación (spec alta rápida, Parte 2), compartidos por la factura y la nota de
+   crédito: "Registrar …" (guarda y abre la confirmación), "Guardar para después" (guarda y vuelve a la lista), "Guardar cambios",
+   "Limpiar campos" y "Cancelar". Los dos primeros envían {Prefijo}.Accion (AccionCabecera); la página decide el destino con
+   RutasPreparacion.DestinoTrasGuardar. Si la serie de registro ya no numera (Proximo.Error), "Registrar …" queda deshabilitado con el
+   motivo visible (aria-describedby). Sin "Liberar" ni "Reabrir". Va en DocumentoCabeceraEditable.Botones (dentro del EditForm). *@
+@if (MotivoNoRegistrable(Proximo) is { } motivo)
+{
+    <button type="button" disabled data-testid="registrar" aria-describedby="@IdMotivo" class="rounded-lg bg-slate-300 px-4 py-2 text-sm font-semibold text-white">@TextoRegistrar</button>
+    <p id="@IdMotivo" class="w-full text-xs text-red-700" data-testid="motivo-registrar">@motivo</p>
+}
+else
+{
+    <button type="submit" name="@NombreAccion" value="@AccionCabecera.Registrar" data-testid="registrar" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">@TextoRegistrar</button>
+}
+<button type="submit" name="@NombreAccion" value="@AccionCabecera.Despues" data-testid="guardar-despues" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Guardar para después</button>
+<button type="submit" data-testid="guardar-cabecera" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">Guardar cambios</button>
+<a href="@LimpiarHref" data-testid="limpiar-cabecera" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Limpiar campos</a>
+<a href="@CancelarHref" data-testid="cancelar-cabecera" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
+
+@code {
+    private const string IdMotivo = "motivo-registrar";
+
+    /// <summary>"Registrar factura" o "Registrar nota de crédito".</summary>
+    [Parameter, EditorRequired] public string TextoRegistrar { get; set; } = string.Empty;
+
+    /// <summary>Prefijo del formulario de la cabecera (la propiedad <c>[SupplyParameterFromForm]</c>): el botón envía <c>{Prefijo}.Accion</c>.</summary>
+    [Parameter] public string Prefijo { get; set; } = "UpdateInput";
+
+    /// <summary>Próximo número de la serie de registro (vista previa); con <c>Error</c>, "Registrar …" se deshabilita con el motivo.</summary>
+    [Parameter] public ProximoVista? Proximo { get; set; }
+
+    /// <summary>La página sin acciones transitorias ("Limpiar campos").</summary>
+    [Parameter, EditorRequired] public string LimpiarHref { get; set; } = string.Empty;
+
+    /// <summary>La vuelta (returnUrl validado o la lista en preparación).</summary>
+    [Parameter, EditorRequired] public string CancelarHref { get; set; } = string.Empty;
+
+    private string NombreAccion => $"{Prefijo}.Accion";
+
+    /// <summary>Motivo visible para no registrar (la serie de registro ya no numera: inactiva, agotada o de otro tipo); null = se puede.</summary>
+    public static string? MotivoNoRegistrable(ProximoVista? proximo) =>
+        proximo?.Error is { } error ? $"No se puede registrar: {error}" : null;
+}

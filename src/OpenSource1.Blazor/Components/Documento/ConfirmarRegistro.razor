@@ -1,0 +1,29 @@
+@* Confirmación de "Registrar" (spec alta rápida, Parte 1.3): resumen en <dl>, qué hace el registro y "Sí, registrar" / "Seguir
+   editando". El EditForm (FormName de la página: "confirm-postear") va aquí; cuando no se muestra, la página lo mantiene VACÍO en el árbol. *@
+<ConfirmDialog Title="@Titulo" Message="@Aviso" Variant="success" CancelHref="@SeguirEditandoHref">
+    @Errores
+    <dl class="grid grid-cols-2 gap-x-4 gap-y-1 rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-900" data-testid="resumen-registro">
+        @foreach (var d in Resumen)
+        {
+            <dt class="font-semibold">@d.Etiqueta</dt>
+            <dd>@d.Valor</dd>
+        }
+    </dl>
+    <EditForm Model="Model" FormName="@FormName" OnValidSubmit="OnValidSubmit" class="mt-4">
+        <button type="submit" data-testid="si-registrar" class="btn-press rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Sí, registrar</button>
+        <a href="@SeguirEditandoHref" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Seguir editando</a>
+    </EditForm>
+</ConfirmDialog>
+
+@code {
+    [Parameter, EditorRequired] public string Titulo { get; set; } = string.Empty;
+    /// <summary>Qué hace el registro y que no se puede deshacer (texto del spec).</summary>
+    [Parameter, EditorRequired] public string Aviso { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<DatoDerivado> Resumen { get; set; } = [];
+    [Parameter, EditorRequired] public object Model { get; set; } = default!;
+    [Parameter, EditorRequired] public string FormName { get; set; } = string.Empty;
+    [Parameter] public EventCallback<EditContext> OnValidSubmit { get; set; }
+    [Parameter, EditorRequired] public string SeguirEditandoHref { get; set; } = string.Empty;
+    /// <summary>Errores del intento de registro (ResumenErrores), dentro del diálogo.</summary>
+    [Parameter] public RenderFragment? Errores { get; set; }
+}

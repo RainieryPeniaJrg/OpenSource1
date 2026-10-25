@@ -11,6 +11,7 @@
 @using OpenSource1.Core.Common
 @using OpenSource1.Core.Enums
 @inject INotaCreditoVentaApiClient NotaApiClient
+@inject IAuthorizationService AuthorizationService
 @inject ILogger<NotasCreditoVenta> Logger
 
 <PageTitle>@(Numero is null ? "Notas de crédito" : $"Nota de crédito {Numero}") – AxionERP</PageTitle>
@@ -19,14 +20,17 @@
     <div>
         <p class="text-xs font-bold tracking-widest uppercase text-brand-600 mb-1">Ventas</p>
         <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">@(Numero is null ? "Notas de crédito" : $"Nota de crédito {Numero}")</h1>
-        <p class="text-sm text-slate-500 mt-1">@(Numero is null ? "Notas de crédito de venta posteadas (documento legal, sin modificación)." : "Documento legal posteado: cabecera, líneas y líneas de IVA.")</p>
+        <p class="text-sm text-slate-500 mt-1">@(Numero is null ? "Notas de crédito de venta registradas y en preparación." : "Documento legal registrado: cabecera, líneas y líneas de IVA.")</p>
     </div>
     <div class="flex flex-wrap items-center gap-2">
         @if (Numero is not null)
         {
             <a href="/notas-credito-venta" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Volver al listado</a>
         }
-        <a href="/notas-credito-venta/borradores" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Borradores</a>
+        else if (permisos?.CanAdd == true)
+        {
+            <a href="/notas-credito-venta/nueva" data-testid="accion-nuevo" class="btn-press inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">+ Nueva nota de crédito</a>
+        }
     </div>
 </div>
 
@@ -35,7 +39,7 @@
     <div class="mb-6">
         @if (messageType == "success")
         {
-            <ActionFeedback Type="success" Title="Nota de crédito posteada" Message="@message" />
+            <ActionFeedback Type="success" Title="Nota de crédito registrada" Message="@message" />
         }
         else
         {
@@ -44,13 +48,25 @@
     </div>
 }
 
-@if (detalle is not null && Ok == "posteada" && CalculoNumeroSerie.EsTextoAviso(AvisoNumeracion))
+@if (detalle is not null && Ok is "posteada" or "registrada" && CalculoNumeroSerie.EsTextoAviso(AvisoNumeracion))
 {
     <div class="mb-6" data-testid="aviso-numeracion"><MessageBox Type="warning" Message="@AvisoNumeracion" /></div>
 }
 
 @if (Numero is null)
 {
+    <PestanasDocumento Base="/notas-credito-venta" EnPreparacion="@EnPreparacion" Conteo="@conteoEnPreparacion" />
+}
+
+@if (EnPreparacion)
+{
+    <ListaNotasEnPreparacion Numero="@SearchNumero" Factura="@SearchFactura" Nombre="@SearchNombre" Pagina="@Pagina" DeleteId="@DeleteId" Ok="@Ok" Permisos="@permisos" />
+}
+else if (Numero is null)
+{
+    @* PF6: el descarte de la pestaña "En preparación" también está en el árbol aquí (formulario vacío). *@
+    <ListaNotasEnPreparacion SoloFormulario="true" Ok="@Ok" />
+
     <!-- ── Filtros ── -->
     <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
         <form method="get" action="/notas-credito-venta" data-enhance class="p-4 sm:p-6">
@@ -87,7 +103,7 @@
 
     <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-8">
         <div class="px-6 py-4 border-b border-slate-100">
-            <h2 class="text-sm font-semibold text-slate-700">Notas de crédito posteadas</h2>
+            <h2 class="text-sm font-semibold text-slate-700">Notas de crédito registradas</h2>
             <p class="mt-1 text-xs text-slate-500">@total resultado(s) · página @Pagina de @Math.Max(totalPaginas, 1).</p>
         </div>
         <div class="overflow-x-auto">
@@ -182,6 +198,13 @@ else
     [SupplyParameterFromQuery(Name = "aplicado")] private string? Aplicado { get; set; }
     // Aviso de numeración del posteo (NS4): lo añade el borrador al redirigir aquí tras postear.
     [SupplyParameterFromQuery(Name = "aviso")] private string? AvisoNumeracion { get; set; }
+    // Spec alta rápida: ?estado=preparacion es la pestaña "En preparación"; deleteId abre allí la confirmación de "Descartar".
+    [SupplyParameterFromQuery(Name = "estado")] private string? Estado { get; set; }
+    [SupplyParameterFromQuery(Name = "deleteId")] private Guid? DeleteId { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool EnPreparacion => Numero is null && string.Equals(Estado, "preparacion", StringComparison.OrdinalIgnoreCase);
 
     private IReadOnlyList<NotaCreditoVentaResponse> notas = [];
     private long total;
@@ -190,13 +213,34 @@ else
     private bool detalleCargaFallida;
     private string? message;
     private string messageType = "info";
+    private PermisosPagina? permisos;
+    private long? conteoEnPreparacion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
+    }
 
     protected override async Task OnParametersSetAsync()
     {
         message = null;
         if (Numero is null)
         {
-            await CargarListadoAsync();
+            try
+            {
+                conteoEnPreparacion = await NotaApiClient.ContarEnPreparacionAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Could not count notas de crédito en preparación.");
+                conteoEnPreparacion = null;
+            }
+
+            if (!EnPreparacion)
+            {
+                await CargarListadoAsync();
+            }
+
             return;
         }
 
@@ -212,12 +256,14 @@ else
             return;
         }
 
-        if (Ok == "posteada" && detalle is not null)
+        if (Ok is "posteada" or "registrada" && detalle is not null)
         {
+            // "posteada": enlaces de la versión anterior. El texto del spec ("Nota de crédito NC-000045 registrada.") y, detrás, el
+            // importe, la factura, lo aplicado y el asiento.
             var c = detalle.Cabecera;
             var registro = c.NumeroRegistroContable;
             var aplicado = decimal.TryParse(Aplicado, NumberStyles.Number, CultureInfo.InvariantCulture, out var a) ? a : (decimal?)null;
-            Show("success", $"Nota de crédito {c.Numero} posteada por {VentasOpciones.Importe(c.ImporteTotal)} sobre la factura {c.FacturaVentaNumero}. " +
+            Show("success", $"Nota de crédito {c.Numero} registrada. Total {VentasOpciones.Importe(c.ImporteTotal)} sobre la factura {c.FacturaVentaNumero}. " +
                 (registro is null
                     ? "Total 0 (devolución sin importe): sin movimiento de cliente ni registro contable."
                     : $"{(aplicado is { } ap ? $"Aplicado a la factura: {VentasOpciones.Importe(ap)}. " : "")}Registro contable {registro}."));
@@ -279,7 +325,7 @@ else
         return parameters.Count == 0 ? "/notas-credito-venta" : $"/notas-credito-venta?{string.Join("&", parameters)}";
     }
 
-    /// <summary>Cabecera en solo lectura (NS20); "Borrador de origen" enlaza al borrador Posteada si la nota lo conserva.</summary>
+    /// <summary>Cabecera en solo lectura (NS20); "Preparación" enlaza a la nota en preparación de origen si la nota la conserva.</summary>
     private static IReadOnlyList<CampoDocumento> CamposNota(NotaCreditoVentaResponse c) =>
     [
         new("Factura acreditada", c.FacturaVentaNumero, $"/facturas-venta/{Uri.EscapeDataString(c.FacturaVentaNumero)}"),
@@ -287,7 +333,7 @@ else
             $"{c.RazonSocialFacturacion} {c.NumeroDocumentoFiscal}".Trim()),
         new("Fechas", $"Reg. {EntradaFecha.Formatear(c.FechaRegistro)} · Doc. {EntradaFecha.Formatear(c.FechaDocumento)}", null, c.Moneda),
         new("Asiento", c.NumeroRegistroContable ?? "Sin asiento (total 0)"),
-        new("Borrador de origen", c.NumeroBorrador, c.NotaCreditoVentaBorradorId is { } b ? $"/notas-credito-venta/borradores/{b}" : null),
+        new("Preparación", c.NotaCreditoVentaBorradorId is null ? "—" : "Ver preparación", c.NotaCreditoVentaBorradorId is { } b ? $"{RutasPreparacion.Nota}/{b}" : null),
         new("Descripción", string.IsNullOrWhiteSpace(c.Descripcion) ? "—" : c.Descripcion, Ancho: true),
     ];
 

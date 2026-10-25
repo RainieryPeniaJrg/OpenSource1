@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using OpenSource1.Application.Security;
+using OpenSource1.Blazor.Components.Documento;
 using OpenSource1.Blazor.Services;
 using OpenSource1.Core.Common;
 
@@ -71,9 +72,10 @@ public sealed class IndicadoresModulos(
         ],
         "facturacion" =>
         [
-            ("Borradores abiertos", "/facturas-venta/borradores?estado=1", async ct => (await facturas.ListBorradoresAsync(new FacturaVentaBorradorFiltro(null, null, null, 1), Uno, ct)).Total),
-            ("Facturas posteadas", "/facturas-venta", async ct => (await facturas.ListFacturasAsync(null, Uno, ct)).Total),
-            ("Borradores de nota de crédito", "/notas-credito-venta/borradores", async ct => (await notas.ListBorradoresAsync(null, Uno, ct)).Total),
+            // En preparación = sin filtro de estado (facturas Abierta + Liberada; notas Abierta), como la pestaña de la lista.
+            ("Facturas en preparación", RutasPreparacion.ListaFacturas, async ct => (await facturas.ListBorradoresAsync(null, Uno, ct)).Total),
+            ("Facturas registradas", "/facturas-venta", async ct => (await facturas.ListFacturasAsync(null, Uno, ct)).Total),
+            ("Notas de crédito en preparación", RutasPreparacion.ListaNotas, async ct => (await notas.ListBorradoresAsync(null, Uno, ct)).Total),
         ],
         "contabilidad" =>
         [

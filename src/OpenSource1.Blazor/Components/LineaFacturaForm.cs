@@ -9,7 +9,7 @@ namespace OpenSource1.Blazor.Components;
 /// <see cref="EntradaDecimal"/> (independiente de la cultura). La validación depende de <see cref="Tipo"/> (campo oculto que fija
 /// la página) y <see cref="ToInput"/> envía SOLO los campos del tipo: la API rechaza los demás (<c>factura.campo_no_aplica</c>).
 /// </summary>
-public sealed class LineaFacturaForm : IValidatableObject
+public class LineaFacturaForm : IValidatableObject
 {
     public const int LongitudDescripcion = 200;
 
@@ -57,7 +57,7 @@ public sealed class LineaFacturaForm : IValidatableObject
         };
     }
 
-    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    public virtual IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (Descripcion is { } d && d.Trim().Length > LongitudDescripcion)
         {

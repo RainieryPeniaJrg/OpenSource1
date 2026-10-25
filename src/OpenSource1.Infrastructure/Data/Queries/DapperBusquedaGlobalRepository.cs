@@ -80,9 +80,9 @@ public sealed class DapperBusquedaGlobalRepository(IDbSession session) : IBusque
             await GrupoAsync(TiposResultadoBusqueda.Clientes, "Clientes", SqlClientes, id => $"/clientes/{id}"),
             await GrupoAsync(TiposResultadoBusqueda.Productos, "Productos", SqlProductos, id => $"/productos/{id}"),
             await GrupoAsync(TiposResultadoBusqueda.Facturas, "Facturas", SqlFacturas, id => $"/facturas-venta/{Uri.EscapeDataString(id)}"),
-            await GrupoAsync(TiposResultadoBusqueda.BorradoresFactura, "Borradores de factura", SqlBorradoresFactura, id => $"/facturas-venta/borradores/{id}"),
+            await GrupoAsync(TiposResultadoBusqueda.BorradoresFactura, "Facturas en preparación", SqlBorradoresFactura, id => $"/facturas-venta/en-preparacion/{id}"),
             await GrupoAsync(TiposResultadoBusqueda.NotasCredito, "Notas de crédito", SqlNotasCredito, id => $"/notas-credito-venta/{Uri.EscapeDataString(id)}"),
-            await GrupoAsync(TiposResultadoBusqueda.BorradoresNotaCredito, "Borradores de nota de crédito", SqlBorradoresNotaCredito, id => $"/notas-credito-venta/borradores/{id}"),
+            await GrupoAsync(TiposResultadoBusqueda.BorradoresNotaCredito, "Notas de crédito en preparación", SqlBorradoresNotaCredito, id => $"/notas-credito-venta/en-preparacion/{id}"),
         ]);
 
         async Task<GrupoResultadosBusqueda> GrupoAsync(string tipo, string titulo, string sql, Func<string, string> ruta)

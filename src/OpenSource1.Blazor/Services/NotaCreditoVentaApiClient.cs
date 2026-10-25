@@ -38,6 +38,9 @@ public sealed class NotaCreditoVentaApiClient(HttpClient httpClient, ILogger<Not
             ?? PagedResult<NotaCreditoVentaBorradorResponse>.Vacio(paginacion ?? new PageRequest());
     }
 
+    public async Task<long> ContarEnPreparacionAsync(CancellationToken cancellationToken = default) =>
+        (await ListBorradoresAsync(null, new PageRequest(1, 1, "CreatedAtUtc", Descendente: true), cancellationToken)).Total;
+
     public Task<NotaCreditoVentaBorradorResponse?> GetBorradorAsync(Guid id, CancellationToken cancellationToken = default) =>
         VentaApiRespuestas.GetOrNullAsync<NotaCreditoVentaBorradorResponse>(
             httpClient, $"{BaseRoute}/borradores/{id}", "el borrador de nota de crédito", logger, cancellationToken);

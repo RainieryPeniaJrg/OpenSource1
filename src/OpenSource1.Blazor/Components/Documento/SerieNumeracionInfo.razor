@@ -1,13 +1,26 @@
-@* Serie de registro y próximo número (vista previa sin reserva, spec no-series). Error prevalece sobre ProximoNumero; el aviso se muestra siempre que haya. *@
+@* Serie de registro y próximo número (vista previa sin reserva). Spec alta rápida: "Se numerará con la serie FV · próximo FV-000123
+   (el número definitivo se asigna al registrar)". Error prevalece sobre ProximoNumero; el aviso se muestra siempre que haya. Sin
+   próximo (documento registrado) solo "Serie de registro: FV". Sin código (la configuración no cargó) el Error se muestra igual. *@
 <p class="text-xs text-slate-500" data-testid="serie-registro">
-    Serie de registro: @if (Codigo is null) { <span>—</span> } else { <strong>@Codigo</strong> }
-    @if (Error is not null)
+    @if (Codigo is null)
     {
-        <span class="ml-1 text-red-600">· @Error</span>
+        <span>Serie de registro: <span>—</span></span>
+        @if (Error is not null)
+        {
+            <span class="ml-1 text-red-600">· @Error</span>
+        }
+    }
+    else if (Error is not null)
+    {
+        <span>Serie de registro: <strong>@Codigo</strong></span><span class="ml-1 text-red-600">· @Error</span>
     }
     else if (ProximoNumero is not null)
     {
-        <span> · Próximo número: <strong>@ProximoNumero</strong> <span class="text-slate-400">(vista previa: no se reserva)</span></span>
+        <span>Se numerará con la serie <strong>@Codigo</strong> · próximo <strong>@ProximoNumero</strong> (el número definitivo se asigna al registrar)</span>
+    }
+    else
+    {
+        <span>Serie de registro: <strong>@Codigo</strong></span>
     }
     @if (Aviso is not null)
     {

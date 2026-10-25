@@ -1,70 +1,206 @@
 @page "/facturas-venta/nueva"
 @attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
+@using System.Globalization
 @using Microsoft.AspNetCore.Authorization
 @using OpenSource1.Application.Features.Almacenes.Dtos
+@using OpenSource1.Application.Features.ConfiguracionNumeracion.Dtos
+@using OpenSource1.Application.Features.CuentasContables.Dtos
+@using OpenSource1.Application.Features.Productos.Dtos
 @using OpenSource1.Application.Features.Series.Dtos
 @using OpenSource1.Application.Features.SociosNegocio.Dtos
 @using OpenSource1.Blazor.Services
+@using OpenSource1.Core.Common
+@using OpenSource1.Core.Entities.Ventas
 @using OpenSource1.Core.Enums
 @inject IFacturaVentaApiClient FacturaApiClient
 @inject ISocioNegocioApiClient SocioApiClient
 @inject IAlmacenApiClient AlmacenApiClient
 @inject ITerminoPagoApiClient TerminoPagoApiClient
+@inject IProductoApiClient ProductoApiClient
+@inject ICuentaContableApiClient CuentaApiClient
+@inject IGrupoContableApiClient GrupoApiClient
 @inject ISerieApiClient SerieApiClient
+@inject IConfiguracionNumeracionApiClient ConfiguracionApiClient
 @inject IAuthorizationService AuthorizationService
 @inject ILogger<FacturaVentaNueva> Logger
 @inject NavigationManager Nav
 
-@* Alta de borrador de factura (Fix-Features B2d) en página-tarjeta propia. Tras crear se abre el editor del borrador
-   (/facturas-venta/borradores/{id}), donde se agregan las líneas. Con ?socioId= (Fix-Features C3, desde la ficha del cliente)
-   el cliente vender-a llega precargado y bloqueado: se envía oculto y "Cambiar cliente" vuelve al alta sin socioId. *@
-<EntityFormPage Titulo="Nueva factura" Subtitulo="Crea el borrador de factura; las líneas se agregan en el editor del borrador."
-                Migas="@Migas" Mensaje="@message" TipoMensaje="@messageType" Errores="@errores">
-    @if (!canAdd)
-    {
-        <p class="text-sm text-slate-600 dark:text-slate-300">No tiene permiso para realizar esta acción.</p>
-        <EditForm Model="AddInput" FormName="add-borrador" OnValidSubmit="CreateAsync"></EditForm>
-    }
-    else
-    {
-        @if (OpcionesFallidas)
+<PageTitle>Nueva factura – AxionERP</PageTitle>
+
+@* Alta rápida de la factura (spec alta rápida, Parte 1): cliente por GET + "Usar" (?socioId= también desde la ficha del cliente),
+   datos derivados en solo lectura (<dl>), numeración informativa y la primera línea. "Agregar línea" envía cabecera + línea en UN POST:
+   la API crea el documento con la línea en una transacción y se abre /facturas-venta/en-preparacion/{id}. Un error no crea nada y la
+   página vuelve a pintar lo capturado. Sin serie configurada (o inactiva): aviso bloqueante y sin formulario. *@
+<PageToolbar Titulo="Nueva factura" Subtitulo="Elija el cliente y agregue la primera línea: la factura queda en preparación hasta que la registre."
+             Migas="@Migas" Permisos="@permisos" NuevoHref="@null">
+    <a href="@Volver" data-testid="cancelar" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Volver</a>
+</PageToolbar>
+
+<ResumenErrores Mensaje="@message" Errores="@errores" />
+
+@if (!canAdd)
+{
+    <p class="text-sm text-slate-600 dark:text-slate-300">No tiene permiso para realizar esta acción.</p>
+}
+else if (motivoBloqueo is not null)
+{
+    <AvisoSinSerie Motivo="@motivoBloqueo" PuedeConfigurar="@esAdministrador" />
+}
+else if (socio is null)
+{
+    <div class="mb-6 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+        <form method="get" action="/facturas-venta/nueva" data-enhance class="mb-4 flex flex-wrap items-end gap-2" data-testid="buscar-socio">
+            @RetornoOculto
+            <div class="min-w-60 flex-1">
+                <label class="mb-1 block text-xs font-semibold text-slate-500" for="socioQuery">Buscar cliente por nombre</label>
+                <input id="socioQuery" type="text" name="socioQuery" value="@SocioQuery" placeholder="ej. Comercial" class="@VentasCss.Filtro" />
+            </div>
+            <button type="submit" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Buscar</button>
+            <p class="w-full text-xs text-slate-400">Se muestran los primeros @VentasOpciones.MaximoSocios clientes por nombre@(string.IsNullOrWhiteSpace(SocioQuery) ? "" : $" que contienen «{SocioQuery}»").</p>
+        </form>
+        @if (socios.CargaFallida)
         {
-            <div class="mb-4"><MessageBox Type="danger" Message="No fue posible cargar los clientes o los almacenes. Por seguridad no se puede crear el borrador hasta que carguen; recargue la página." /></div>
+            <MessageBox Type="danger" Message="No fue posible cargar los clientes; recargue la página." />
         }
-        @if (socioPrecargado is null)
+        else if (socios.Items.Count == 0)
         {
-            <form method="get" action="/facturas-venta/nueva" data-enhance class="mb-6 flex flex-wrap items-end gap-2" data-testid="buscar-socio">
-                @if (!string.IsNullOrWhiteSpace(ReturnUrl))
+            <p class="text-sm text-slate-400">No hay clientes con ese nombre.</p>
+        }
+        else
+        {
+            <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200" data-testid="clientes-encontrados">
+                @foreach (var s in socios.Items)
                 {
-                    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                    <li @key="s.Id" class="flex items-center justify-between px-4 py-2 text-sm">
+                        <span>@s.Codigo — @s.NombreComercial</span>
+                        <a href="@UrlConSocio(s.Id)" aria-label="@($"Usar {s.NombreComercial}")" class="btn-press rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100">Usar</a>
+                    </li>
                 }
-                <div class="min-w-60 flex-1">
-                    <label class="mb-1 block text-xs font-semibold text-slate-500" for="socioQuery">Buscar cliente por nombre</label>
-                    <input id="socioQuery" type="text" name="socioQuery" value="@SocioQuery" placeholder="ej. Comercial" class="@VentasCss.Filtro" />
-                </div>
-                <button type="submit" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Buscar</button>
-                <p class="w-full text-xs text-slate-400">Se muestran los primeros @VentasOpciones.MaximoSocios clientes por nombre@(string.IsNullOrWhiteSpace(SocioQuery) ? "" : $" que contienen «{SocioQuery}»").</p>
+            </ul>
+        }
+    </div>
+}
+else
+{
+    <div class="mb-6 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm" data-testid="cliente-elegido">
+        <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-700">Cliente</h2>
+            <a href="@CambiarClienteHref" class="text-xs font-semibold text-brand-600 hover:text-brand-700">Cambiar cliente</a>
+        </div>
+        <DatosDerivados Datos="@DatosCliente" DetallesContables="@DetallesContables" />
+        @if (esAdministrador)
+        {
+            @* R9-C3: "Más opciones → Cambiar serie de registro" visible con cualquier tipo de línea y antes de elegir producto. La serie
+               elegida viaja en ?serieRegistroId= (enlaces de la página y buscador de producto) y, al agregar la línea, en el campo oculto
+               AltaInput.SerieRegistroId. Solo el Administrador: para el resto ni se pinta ni se lee de la query. *@
+            <form method="get" action="/facturas-venta/nueva" data-enhance data-testid="form-serie-registro">
+                <input type="hidden" name="socioId" value="@socio.Id" />
+                <input type="hidden" name="tipo" value="@((int)AddTipo)" />
+                @if (AddProductoId is { } productoElegido)
+                {
+                    <input type="hidden" name="addProductoId" value="@productoElegido" />
+                }
+                @if (!string.IsNullOrWhiteSpace(AddProductoQuery))
+                {
+                    <input type="hidden" name="addProductoQuery" value="@AddProductoQuery" />
+                }
+                @RetornoOculto
+                <NumeracionRegistro Codigo="@codigoNumeracion" Proximo="@proximo" PuedeCambiar="true" Id="serieRegistroId" Name="serieRegistroId"
+                                    Series="@seriesRegistro.Items" Seleccion="@AltaInput!.SerieRegistroId" CargaFallida="@seriesRegistro.CargaFallida">
+                    @* El selector va en un formulario GET aparte: un cambio sin "Aplicar" no viaja con la línea (se dice explícitamente). *@
+                    <p class="mt-1 text-xs text-slate-500" data-testid="ayuda-aplicar-serie">Aplique la serie antes de agregar la línea; un cambio sin aplicar no se usa.</p>
+                    <button type="submit" class="btn-press mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Aplicar</button>
+                </NumeracionRegistro>
             </form>
         }
-        <EditForm Model="AddInput" FormName="add-borrador" OnValidSubmit="CreateAsync" Enhance="true">
-            <DataAnnotationsValidator />
-            @if (socioPrecargado is not null)
+        else
+        {
+            <NumeracionRegistro Codigo="@codigoNumeracion" Proximo="@proximo" />
+        }
+    </div>
+
+    <div class="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid="fila-alta">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-6 py-4">
+            <h2 class="text-sm font-semibold text-slate-700">Primera línea</h2>
+            <div class="flex items-center gap-1 text-xs" data-testid="tipos-linea">
+                @foreach (var t in new[] { TipoLineaFactura.Producto, TipoLineaFactura.CuentaContable, TipoLineaFactura.Comentario })
+                {
+                    <a href="@BuildUrl(tipo: (int)t)" aria-current="@(AddTipo == t ? "true" : null)" class="@(AddTipo == t ? "rounded-lg bg-green-600 px-3 py-1 font-semibold text-white" : "rounded-lg border border-green-200 bg-white px-3 py-1 font-semibold text-green-700 hover:bg-green-50")">@VentasOpciones.TipoLinea(t)</a>
+                }
+            </div>
+        </div>
+        <div class="px-6 py-5">
+            @if (AddTipo == TipoLineaFactura.Producto && addProducto is null)
             {
-                <div class="mb-6 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3 text-sm dark:border-brand-500/20 dark:bg-brand-500/10" data-testid="cliente-precargado">
-                    <input type="hidden" name="AddInput.SocioNegocioId" value="@socioPrecargado.Id" />
-                    <p class="text-xs font-semibold text-slate-500 dark:text-slate-400">Vender a</p>
-                    <p class="font-semibold text-slate-800 dark:text-slate-100">@socioPrecargado.Codigo — @socioPrecargado.NombreComercial</p>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">Término de pago: @(terminoPrecargado ?? "Sin término") · Grupo de cliente: @(socioPrecargado.GrupoClienteContableCodigo ?? "Sin asignar") · Fecha de registro: hoy</p>
-                    <a href="@CambiarClienteHref" class="mt-1 inline-block text-xs font-semibold text-brand-600 hover:text-brand-700">Cambiar cliente</a>
-                </div>
+                <BuscadorProducto ActionUrl="/facturas-venta/nueva" QueryParamName="addProductoQuery" Termino="@AddProductoQuery"
+                                  Resultados="@addProductoOpciones" CargaFallida="@addProductoOpcionesCargaFallida"
+                                  ConstruirUrlUsar="@(id => BuildUrl(tipo: 1, addProductoId: id, addProductoQuery: AddProductoQuery))">
+                    <CamposOcultos><input type="hidden" name="socioId" value="@socio.Id" /><input type="hidden" name="tipo" value="1" />@SerieOculta@RetornoOculto</CamposOcultos>
+                </BuscadorProducto>
             }
-            <CabeceraFacturaFields Model="AddInput!" Prefix="AddInput" Socios="@socios.Items" Almacenes="@almacenes.Items" SocioBloqueado="@(socioPrecargado is not null)"
-                                   SeriesBorrador="@seriesBorrador.Items" SeriesRegistro="@seriesRegistro.Items"
-                                   SeriesCargaFallida="@(seriesBorrador.CargaFallida || seriesRegistro.CargaFallida)" />
-            <FormularioAcciones CancelarHref="@Volver" LimpiarHref="@Nav.Uri" TextoGuardar="Crear borrador" Deshabilitado="@OpcionesFallidas" />
-        </EditForm>
-    }
-</EntityFormPage>
+            else
+            {
+                @if (addProducto is not null && AddTipo == TipoLineaFactura.Producto)
+                {
+                    <div class="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p class="text-sm text-slate-700">Producto: <span class="font-semibold">@addProducto.Codigo — @addProducto.Nombre</span>
+                            <span class="text-xs text-slate-400">· Unidad base: @addProducto.UnidadMedidaCodigo · Precio de venta: @addProducto.PrecioVenta.ToString("0.00##", CultureInfo.InvariantCulture)</span></p>
+                        <a href="@BuildUrl(tipo: 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cambiar producto</a>
+                    </div>
+                }
+                <EditForm Model="AltaInput" FormName="alta-factura" OnValidSubmit="CrearAsync" OnInvalidSubmit="ErroresDelFormulario" Enhance="true">
+                    <DataAnnotationsValidator />
+                    <input type="hidden" name="AltaInput.SocioNegocioId" value="@socio.Id" />
+                    @if (esAdministrador)
+                    {
+                        @* La serie elegida en "Más opciones" (tarjeta del cliente); vacío = la configurada. *@
+                        <input type="hidden" name="AltaInput.SerieRegistroId" value="@AltaInput!.SerieRegistroId" />
+                    }
+                    <div class="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="cabecera-alta">
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-slate-700" for="AltaInput_FechaRegistroTexto">Fecha de registro</label>
+                            <input id="AltaInput_FechaRegistroTexto" type="date" name="AltaInput.FechaRegistroTexto" value="@AltaInput!.FechaRegistroTexto" class="@VentasCss.Input" />
+                            <ValidationMessage For="() => AltaInput.FechaRegistroTexto" />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-slate-700" for="AltaInput_FechaDocumentoTexto">Fecha de documento</label>
+                            <input id="AltaInput_FechaDocumentoTexto" type="date" name="AltaInput.FechaDocumentoTexto" value="@AltaInput.FechaDocumentoTexto" class="@VentasCss.Input" />
+                            <ValidationMessage For="() => AltaInput.FechaDocumentoTexto" />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-slate-700" for="AltaInput_FechaVencimientoTexto">Fecha de vencimiento</label>
+                            <input id="AltaInput_FechaVencimientoTexto" type="date" name="AltaInput.FechaVencimientoTexto" value="@AltaInput.FechaVencimientoTexto"
+                                   aria-describedby="AltaInput_VencimientoAyuda" class="@VentasCss.Input" />
+                            <ValidationMessage For="() => AltaInput.FechaVencimientoTexto" />
+                            <p id="AltaInput_VencimientoAyuda" class="mt-1 text-xs text-slate-400">Vacío = fecha de documento + días del término de pago.</p>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-slate-700" for="AltaInput_DescripcionDocumento">Descripción de la factura</label>
+                            <input id="AltaInput_DescripcionDocumento" type="text" name="AltaInput.DescripcionDocumento" value="@AltaInput.DescripcionDocumento" maxlength="200" class="@VentasCss.Input" />
+                            <ValidationMessage For="() => AltaInput.DescripcionDocumento" />
+                        </div>
+                    </div>
+                    <LineaFacturaCampos Model="AltaInput" Prefix="AltaInput" Tipo="@AddTipo" Almacenes="@almacenes.Items" Cuentas="@cuentas.Items"
+                                        GruposIva="@gruposIva.Items" AlmacenCabeceraCodigo="@AlmacenPredeterminado?.Codigo" OpcionesFallidas="@OpcionesFallidas(AddTipo)" />
+                    <div class="mt-5 flex items-center gap-3">
+                        @if (!OpcionesFallidas(AddTipo))
+                        {
+                            <button type="submit" data-testid="agregar-linea" class="btn-press rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700">Agregar línea</button>
+                        }
+                        <a href="@BuildUrl(tipo: (int)AddTipo)" class="btn-press rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Limpiar campos</a>
+                    </div>
+                </EditForm>
+            }
+        </div>
+    </div>
+}
+
+@* Formulario siempre en el árbol: sin permiso, sin cliente o con el buscador de producto a la vista, un POST obsoleto o forzado llega
+   al handler y muestra el mensaje real (de la guarda o de la API, 403/400). *@
+@if (!MuestraFormulario)
+{
+    <EditForm Model="AltaInput" FormName="alta-factura" OnValidSubmit="CrearAsync"></EditForm>
+}
 
 @code {
     [SupplyParameterFromQuery(Name = "returnUrl")] private string? ReturnUrl { get; set; }
@@ -72,90 +208,265 @@
     // Tolerante (ola final Fix-Features): un ?socioId= ilegible se ignora; con Guid? el binder lanzaría (página de error).
     [SupplyParameterFromQuery(Name = "socioId")] private string? SocioIdTexto { get; set; }
     private Guid? SocioId => InventarioVistasOpciones.ParseGuid(SocioIdTexto);
-    [SupplyParameterFromForm(FormName = "add-borrador")] private FacturasVentaBorradores.BorradorForm? AddInput { get; set; }
+    // [SupplyParameterFromQuery] no admite enums: 1 Producto, 2 CuentaContable, 3 Comentario.
+    [SupplyParameterFromQuery(Name = "tipo")] private int? TipoQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "addProductoQuery")] private string? AddProductoQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "addProductoId")] private string? AddProductoIdTexto { get; set; }
+    // R9-C3: serie de registro elegida por el Administrador en "Más opciones" (tolerante, como socioId); ignorada para el resto.
+    [SupplyParameterFromQuery(Name = "serieRegistroId")] private string? SerieRegistroIdTexto { get; set; }
+    private Guid? SerieElegida => esAdministrador ? InventarioVistasOpciones.ParseGuid(SerieRegistroIdTexto) : null;
+    private Guid? AddProductoId => InventarioVistasOpciones.ParseGuid(AddProductoIdTexto);
+    [SupplyParameterFromForm(FormName = "alta-factura")] private AltaFacturaForm? AltaInput { get; set; }
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private OpcionesCargadas<SocioNegocioResponse> socios = OpcionesCargadas<SocioNegocioResponse>.SinCargar;
     private OpcionesCargadas<AlmacenResponse> almacenes = OpcionesCargadas<AlmacenResponse>.SinCargar;
-    // Si las series no cargan, los selectores quedan en "— La configurada —" y el alta sigue funcionando (null = la configurada).
-    private OpcionesCargadas<SerieResponse> seriesBorrador = OpcionesCargadas<SerieResponse>.SinCargar;
+    private OpcionesCargadas<CuentaContableResponse> cuentas = OpcionesCargadas<CuentaContableResponse>.SinCargar;
+    private OpcionesCargadas<GrupoOpcion> gruposIva = OpcionesCargadas<GrupoOpcion>.SinCargar;
     private OpcionesCargadas<SerieResponse> seriesRegistro = OpcionesCargadas<SerieResponse>.SinCargar;
+    private ConfiguracionNumeracionResponse? serieRegistro;
+    private ProximoVista? proximo;
+    // Línea de numeración: la serie aplicada por el Administrador (?serieRegistroId=) o, si no, la configurada.
+    private string? codigoNumeracion;
+    private string? motivoBloqueo;
     private PermisosPagina? permisos;
-    private SocioNegocioResponse? socioPrecargado;
-    private string? terminoPrecargado;
+    private SocioNegocioResponse? socio;
+    private string? terminoPago;
+    private ProductoResponse? addProducto;
+    private IReadOnlyList<ProductoResponse> addProductoOpciones = [];
+    private bool addProductoOpcionesCargaFallida;
+    private bool altaNueva;
     private bool canAdd;
+    private bool esAdministrador;
     private string? message;
-    private string messageType = "warning";
     private IReadOnlyList<string> errores = [];
+
+    private TipoLineaFactura AddTipo => TipoQuery is 2 ? TipoLineaFactura.CuentaContable : TipoQuery is 3 ? TipoLineaFactura.Comentario : TipoLineaFactura.Producto;
+
+    private bool MuestraFormulario => canAdd && motivoBloqueo is null && socio is not null && !(AddTipo == TipoLineaFactura.Producto && addProducto is null);
+
+    private string Volver => RetornoLocal.Volver(ReturnUrl, RutasPreparacion.ListaFacturas);
+
+    private AlmacenResponse? AlmacenPredeterminado => almacenes.Items.FirstOrDefault(a => a.EsPredeterminado);
+
+    private IReadOnlyList<Miga> Migas => [new("Facturación", "/modulos/facturacion"), new("Facturas", "/facturas-venta"), new("Nueva factura")];
 
     // "Cambiar cliente" quita el socioId y conserva la vuelta (returnUrl) si la hay.
     private string CambiarClienteHref => string.IsNullOrWhiteSpace(ReturnUrl)
         ? "/facturas-venta/nueva"
         : RetornoLocal.ConRetorno("/facturas-venta/nueva", Volver);
-    private bool OpcionesFallidas => socios.CargaFallida || almacenes.CargaFallida;
-    private string Volver => RetornoLocal.Volver(ReturnUrl, "/facturas-venta/borradores");
-    private IReadOnlyList<Miga> Migas => [new("Facturación", "/modulos/facturacion"), new("Borradores de factura", Volver), new("Nueva factura")];
+
+    private string UrlConSocio(Guid socioId) => RetornoLocal.ConParametro(CambiarClienteHref, "socioId", socioId.ToString());
+
+    private IReadOnlyList<DatoDerivado> DatosCliente => socio is null ? [] :
+    [
+        new("Vender a", $"{socio.Codigo} — {socio.NombreComercial}", $"/clientes/{socio.Id}"),
+        new("Facturar a", $"{socio.Codigo} — {socio.NombreComercial}"),
+        new("RNC / razón social", DatosDocumento.Fiscal(socio.RazonSocial, socio.NumeroDocumentoFiscal)),
+        new("Término de pago", terminoPago ?? "Sin término"),
+        new("Moneda", SerieFacturaVentaIds.MonedaPorDefecto),
+        new("Almacén", AlmacenPredeterminado is { } a ? $"{a.Codigo} — {a.Nombre} (predeterminado)" : "El predeterminado"),
+    ];
+
+    private IReadOnlyList<DatoDerivado> DetallesContables => socio is null ? [] :
+    [
+        new("Grupo de negocio", socio.GrupoNegocioCodigo ?? "Sin asignar"),
+        new("Grupo de IVA de negocio", socio.GrupoIvaNegocioCodigo ?? "Sin asignar"),
+        new("Grupo de cliente contable", socio.GrupoClienteContableCodigo ?? "Sin asignar"),
+    ];
 
     protected override async Task OnInitializedAsync()
     {
-        AddInput ??= new() { FechaRegistroTexto = EntradaFecha.Formatear(DateOnly.FromDateTime(DateTime.Today)) };
+        // En un GET el formulario es nuevo; en un POST llega enlazado y no se retoca (el precio vacío debe fallar).
+        altaNueva = AltaInput is null;
+        var hoy = EntradaFecha.Formatear(DateOnly.FromDateTime(DateTime.Today));
+        AltaInput ??= new()
+        {
+            Tipo = (short)AddTipo,
+            CantidadTexto = AddTipo == TipoLineaFactura.Comentario ? null : "1",
+            FechaRegistroTexto = hoy,
+            FechaDocumentoTexto = hoy,
+        };
+
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
         canAdd = permisos.CanAdd;
+        esAdministrador = await permisos.PuedeAsync(ApplicationPolicies.CanAdministrar);
+        if (altaNueva)
+        {
+            AltaInput.SerieRegistroId = SerieElegida;
+        }
 
-        if (canAdd)
+        if (!canAdd)
+        {
+            return;
+        }
+
+        await CargarNumeracionAsync();
+        if (motivoBloqueo is not null)
+        {
+            return;
+        }
+
+        if (SocioId is not null)
+        {
+            await CargarSocioAsync();
+        }
+
+        if (socio is null)
         {
             socios = await VentasOpciones.SociosAsync(SocioApiClient, SocioQuery, Logger);
-            almacenes = await VentasOpciones.AlmacenesAsync(AlmacenApiClient, Logger);
-            seriesBorrador = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.BorradorFacturaVenta, Logger);
-            seriesRegistro = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.FacturaVenta, Logger);
-            await PrecargarSocioAsync();
+            return;
+        }
+
+        almacenes = await VentasOpciones.AlmacenesAsync(AlmacenApiClient, Logger);
+        if (AddTipo == TipoLineaFactura.CuentaContable)
+        {
+            cuentas = await VentasOpciones.CuentasCapturaDirectaAsync(CuentaApiClient, Logger);
+            gruposIva = await VentasOpciones.GruposIvaProductoAsync(GrupoApiClient, Logger);
+        }
+
+        if (AddTipo == TipoLineaFactura.Producto)
+        {
+            await CargarProductoAsync();
         }
     }
 
-    /// <summary>?socioId=: carga el cliente y lo fija como vender-a; si no existe (o no carga) se avisa y queda el selector normal.</summary>
-    private async Task PrecargarSocioAsync()
+    /// <summary>
+    /// Serie configurada y su próximo número; sin fila o con la serie inactiva, el aviso bloqueante. Si la configuración no carga, no se
+    /// bloquea (la API valida al guardar, como F7) y la línea de numeración lo indica.
+    /// </summary>
+    private async Task CargarNumeracionAsync()
     {
-        if (SocioId is not { } socioId)
+        IReadOnlyList<ConfiguracionNumeracionResponse>? configuracion = null;
+        try
         {
+            configuracion = await ConfiguracionApiClient.ListAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not load configuración de numeración.");
+        }
+
+        motivoBloqueo = NumeracionDocumento.MotivoBloqueo(
+            configuracion, TipoDocumentoSerie.BorradorFacturaVenta, TipoDocumentoSerie.FacturaVenta, "facturas de venta");
+        serieRegistro = NumeracionDocumento.Configurada(configuracion, TipoDocumentoSerie.FacturaVenta);
+        if (esAdministrador && motivoBloqueo is null)
+        {
+            seriesRegistro = await SeriesOpciones.ActivasAsync(SerieApiClient, TipoDocumentoSerie.FacturaVenta, Logger);
+        }
+
+        // Serie aplicada por el Administrador (en un POST, la del campo oculto que se va a enviar): su código (de la lista de series)
+        // y su próximo número; sin elegir (o para el resto), la configurada.
+        if (esAdministrador && AltaInput!.SerieRegistroId is { } elegida && elegida != serieRegistro?.SerieId)
+        {
+            codigoNumeracion = seriesRegistro.Items.FirstOrDefault(x => x.Id == elegida)?.Codigo;
+            proximo = await SeriesOpciones.ProximoAsync(SerieApiClient, elegida, Logger);
             return;
+        }
+
+        codigoNumeracion = serieRegistro?.SerieCodigo;
+        proximo = serieRegistro is null
+            ? new ProximoVista(null, null, "No fue posible comprobar la serie configurada.")
+            : await SeriesOpciones.ProximoAsync(SerieApiClient, serieRegistro.SerieId, Logger);
+    }
+
+    private async Task CargarSocioAsync()
+    {
+        try
+        {
+            socio = await SocioApiClient.GetByIdAsync(SocioId!.Value);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not load socio {Id} for nueva factura.", SocioId);
+            Show("No fue posible cargar el cliente indicado; elija uno de la lista.");
+            return;
+        }
+
+        if (socio is null)
+        {
+            Show("No se encontró el cliente indicado; elija uno de la lista.");
+            return;
+        }
+
+        if (socio.TerminoPagoId is { } terminoId)
+        {
+            terminoPago = await TerminoPagoOpciones.NombreAsync(TerminoPagoApiClient, terminoId, Logger);
+        }
+    }
+
+    private async Task CargarProductoAsync()
+    {
+        if (AddProductoId is { } id)
+        {
+            try { addProducto = await ProductoApiClient.GetByIdAsync(id); }
+            catch (Exception ex) { Logger.LogWarning(ex, "Could not load producto {Id}.", id); }
+            if (addProducto is not null)
+            {
+                // El precio es obligatorio (Task 8.4): se propone el precio de venta (unidad base) si es mayor que cero.
+                if (altaNueva && addProducto.PrecioVenta > 0 && string.IsNullOrWhiteSpace(AltaInput!.PrecioUnitarioTexto))
+                {
+                    AltaInput.PrecioUnitarioTexto = addProducto.PrecioVenta.ToString("0.00##", CultureInfo.InvariantCulture);
+                }
+
+                return;
+            }
         }
 
         try
         {
-            socioPrecargado = await SocioApiClient.GetByIdAsync(socioId);
+            var filtro = new ProductoSearchFilter(null, string.IsNullOrWhiteSpace(AddProductoQuery) ? null : AddProductoQuery.Trim(), null, null, null, null, null, null);
+            addProductoOpciones = (await ProductoApiClient.ListAsync(filtro, new PageRequest(1, 20, "Nombre", Descendente: false))).Items;
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Could not load socio {Id} for nueva factura.", socioId);
-            Show("warning", "No fue posible cargar el cliente indicado; seleccione uno de la lista.");
-            return;
-        }
-
-        if (socioPrecargado is null)
-        {
-            Show("warning", "No se encontró el cliente indicado; seleccione uno de la lista.");
-            return;
-        }
-
-        AddInput!.SocioNegocioId = socioPrecargado.Id;
-        if (socioPrecargado.TerminoPagoId is { } terminoId)
-        {
-            terminoPrecargado = await TerminoPagoOpciones.NombreAsync(TerminoPagoApiClient, terminoId, Logger);
+            Logger.LogWarning(ex, "Could not load productos.");
+            addProductoOpcionesCargaFallida = true;
         }
     }
 
-    private async Task CreateAsync()
+    private bool OpcionesFallidas(TipoLineaFactura tipo) => tipo switch
     {
-        if (OpcionesFallidas)
+        TipoLineaFactura.Producto => almacenes.CargaFallida,
+        TipoLineaFactura.CuentaContable => cuentas.CargaFallida || gruposIva.CargaFallida,
+        _ => false,
+    };
+
+    private async Task CrearAsync()
+    {
+        // Con permiso, las guardas de la página; sin permiso el POST (forzado) va a la API igualmente y se muestra su 403.
+        if (canAdd && motivoBloqueo is not null)
         {
-            Show("danger", "No fue posible cargar los clientes o los almacenes; recargue la página.");
+            Show(motivoBloqueo);
             return;
         }
 
-        var f = AddInput!;
-        var input = new BorradorCabeceraInput(
-            f.SocioNegocioId ?? Guid.Empty, f.SocioNegocioFacturarAId, f.FechaRegistro, f.FechaDocumento, f.FechaVencimiento, f.AlmacenId,
-            string.IsNullOrWhiteSpace(f.Descripcion) ? null : f.Descripcion.Trim(), f.SerieBorradorId, f.SerieRegistroId);
+        if (canAdd && socio is null)
+        {
+            Show("Elija primero el cliente.");
+            return;
+        }
+
+        if (canAdd && AddTipo == TipoLineaFactura.Producto && addProducto is null)
+        {
+            Show("Seleccione primero un producto.");
+            return;
+        }
+
+        if (canAdd && OpcionesFallidas(AddTipo))
+        {
+            Show("No fue posible cargar las opciones de la línea; recargue la página.");
+            return;
+        }
+
+        var f = AltaInput!;
+        // El cliente de la query manda sobre el campo oculto: un POST manipulado no cambia de cliente.
+        if (socio is not null)
+        {
+            f.SocioNegocioId = socio.Id;
+        }
+
+        var input = f.ToAlta(AddTipo, addProducto?.Id, addProducto?.UnidadMedidaBaseId, esAdministrador);
         // R17: la navegación va FUERA del try (NavigateTo puede lanzar NavigationException y el catch se la tragaría).
         string? destino = null;
         try
@@ -163,18 +474,17 @@
             var result = await FacturaApiClient.CreateBorradorAsync(input);
             if (result.Succeeded)
             {
-                // Tras crear se abre el editor del borrador para capturar las líneas.
-                destino = $"/facturas-venta/borradores/{result.Valor!.Id}?ok=creado";
+                destino = RetornoLocal.ConParametro(RutasPreparacion.ConTipo(RutasPreparacion.Factura, result.Valor!.Id, AddTipo), "ok", "linea_creada");
             }
             else
             {
-                Show("warning", result.Message, result.Errors);
+                Show(result.Message, result.Errors);
             }
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Could not create borrador de factura.");
-            Show("danger", "No fue posible crear el borrador.");
+            Logger.LogWarning(ex, "Could not create factura en preparación.");
+            Show("No fue posible crear la factura.");
         }
 
         if (destino is not null)
@@ -183,9 +493,41 @@
         }
     }
 
-    private void Show(string type, string? text, IReadOnlyList<string>? errors = null)
+    private string BuildUrl(int? tipo = null, Guid? addProductoId = null, string? addProductoQuery = null)
     {
-        messageType = type;
+        var parametros = new List<string>();
+        if (socio is not null) parametros.Add($"socioId={socio.Id}");
+        if (tipo is { } t) parametros.Add($"tipo={t}");
+        if (addProductoId.HasValue) parametros.Add($"addProductoId={addProductoId.Value}");
+        if (!string.IsNullOrWhiteSpace(addProductoQuery)) parametros.Add($"addProductoQuery={Uri.EscapeDataString(addProductoQuery)}");
+        if (SerieElegida is { } serie) parametros.Add($"serieRegistroId={serie}");
+        if (!string.IsNullOrWhiteSpace(ReturnUrl)) parametros.Add($"returnUrl={Uri.EscapeDataString(Volver)}");
+        return parametros.Count == 0 ? "/facturas-venta/nueva" : $"/facturas-venta/nueva?{string.Join("&", parametros)}";
+    }
+
+    /// <summary>Serie elegida por el Administrador, oculta en el buscador de producto (GET) para no perderla.</summary>
+    private RenderFragment SerieOculta => __builder =>
+    {
+        if (SerieElegida is { } serie)
+        {
+            <input type="hidden" name="serieRegistroId" value="@serie" />
+        }
+    };
+
+    /// <summary>R9-C1: envío inválido (validación del formulario) → el ResumenErrores único de la página (enfocado por app.errores.js).</summary>
+    private void ErroresDelFormulario(EditContext contexto) => Show(ErroresFormulario.Mensaje, ErroresFormulario.Desde(contexto));
+
+    /// <summary>returnUrl oculto en los formularios GET (buscadores), para no perder la vuelta.</summary>
+    private RenderFragment RetornoOculto => __builder =>
+    {
+        if (!string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            <input type="hidden" name="returnUrl" value="@Volver" />
+        }
+    };
+
+    private void Show(string? text, IReadOnlyList<string>? errors = null)
+    {
         message = text;
         errores = errors ?? [];
     }

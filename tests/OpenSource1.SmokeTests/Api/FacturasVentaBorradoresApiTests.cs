@@ -88,6 +88,10 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
         Assert.Equal(AlmacenIds.Principal, borrador.AlmacenId);
         Assert.Equal((EstadoFacturaBorrador.Abierta, "DOP", 0), (borrador.Estado, borrador.Moneda, borrador.NumeroLineas));
         Assert.True(borrador.Xmin > 0);
+        Assert.False(string.IsNullOrWhiteSpace(borrador.GrupoNegocioCodigo));
+        Assert.False(string.IsNullOrWhiteSpace(borrador.GrupoIvaNegocioCodigo));
+        Assert.False(string.IsNullOrWhiteSpace(borrador.GrupoClienteContableCodigo));
+        Assert.Equal(0m, borrador.ImporteTotal);
 
         // Numeración consecutiva de FV-BORR.
         var otro = await CrearBorradorOkAsync(client, new { socioNegocioId = socio });
@@ -171,7 +175,60 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
 
         await AssertErrorAsync(
             await client.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = ok, almacenId = Guid.NewGuid() }),
-            HttpStatusCode.BadRequest, "almacén", "AlmacenId");
+            HttpStatusCode.BadRequest, "predeterminado", "AlmacenId");
+    }
+
+    [Fact]
+    public async Task AltaRapida_ConPrimeraLinea_201_ConLaLinea_YAlmacenPredeterminado()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente alta rapida");
+        var producto = await CrearProductoAsync(client, 100m);
+
+        var borrador = await CrearBorradorOkAsync(client, new
+        {
+            socioNegocioId = socio,
+            primeraLinea = new { tipo = TipoLineaFactura.Producto, productoId = producto, cantidad = 2m, precioUnitario = 100m },
+        });
+
+        Assert.Equal((1, AlmacenIds.Principal), (borrador.NumeroLineas, borrador.AlmacenId));
+        var lineas = await client.GetFromJsonAsync<List<LineaFacturaVentaBorradorResponse>>($"{Base}/borradores/{borrador.Id}/lineas");
+        Assert.Equal(200m, Assert.Single(lineas!).ImporteLinea);
+    }
+
+    [Fact]
+    public async Task AltaRapida_PrimeraLineaInvalida_400EnPrimeraLinea_YNoCreaBorrador()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente alta rapida invalida");
+        var producto = await CrearProductoAsync(client, 100m);
+
+        await AssertErrorAsync(
+            await client.PostAsJsonAsync($"{Base}/borradores", new
+            {
+                socioNegocioId = socio,
+                primeraLinea = new { tipo = TipoLineaFactura.Producto, productoId = producto, cantidad = 1m, precioUnitario = 0m },
+            }),
+            HttpStatusCode.BadRequest, "precio", "PrimeraLinea.PrecioUnitario");
+
+        var pagina = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?socioId={socio}");
+        Assert.Empty(pagina!.Items);
+    }
+
+    [Fact]
+    public async Task Almacen_DistintoDelPredeterminado_400NoEditable_EnAltaYModificacion()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente almacen fijo");
+        var otro = await CrearAlmacenAsync(client);
+
+        await AssertErrorAsync(
+            await client.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, almacenId = otro }),
+            HttpStatusCode.BadRequest, "predeterminado", "AlmacenId");
+        var borrador = await CrearBorradorOkAsync(client, new { socioNegocioId = socio, almacenId = AlmacenIds.Principal });
+        await AssertErrorAsync(
+            await client.PutAsJsonAsync($"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, almacenId = otro }),
+            HttpStatusCode.BadRequest, "predeterminado", "AlmacenId");
     }
 
     [Fact]
@@ -491,6 +548,71 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
             totales!.Grupos);
         Assert.Equal((80.09m, 5.42m, 85.51m), (totales.ImporteSinIva, totales.ImporteIva, totales.ImporteTotal));
         Assert.Equal(HttpStatusCode.OK, (await Rol("Ejecutor").GetAsync($"{Base}/borradores/{borrador.Id}/totales")).StatusCode);
+
+        // Spec alta rápida: el listado "En preparación" muestra el mismo total que la vista previa.
+        Assert.Equal(totales.ImporteTotal, (await GetBorradorAsync(client, borrador.Id)).ImporteTotal);
+        var lista = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?numero={borrador.Numero}");
+        Assert.Equal(totales.ImporteTotal, Assert.Single(lista!.Items).ImporteTotal);
+    }
+
+    [Fact]
+    public async Task ImporteTotalSql_IgualALaCalculadora_VariosIvaDecimalesYMedios_SinComentariosNiBorradas()
+    {
+        // El total que calcula el SQL del listado debe coincidir al céntimo con CalculadoraIvaFactura (base e IVA redondeados a 2 por
+        // identificador, medios alejándose de cero). Importes de 4 decimales fijados por SQL para forzar los casos límite.
+        var client = Admin();
+        var borrador = await CrearBorradorOkAsync(client, new { socioNegocioId = await CrearSocioAsync(client, "Totales SQL") });
+        var valores = new (string Identificador, decimal Porcentaje, decimal Importe)[]
+        {
+            ("ITBIS18", 18m, 5.0025m), ("ITBIS18", 18m, 5.0025m),        // base 10.005 → 10.01 (al par sería 10.00); IVA 1.8018 → 1.80
+            ("MEDIO", 4.5m, 0.5000m), ("MEDIO", 4.5m, 0.5000m),          // base 1.00; IVA 0.045 → 0.05 (al par sería 0.04)
+            ("RARO", 13.33333m, 0.3333m), ("RARO", 13.33333m, 0.3334m),  // base 0.6667 → 0.67; IVA 0.0893333… → 0.09
+            ("EXENTO", 0m, 12.3456m),                                     // base 12.35; IVA 0
+        };
+        var lineas = new List<(LineaFacturaVentaBorradorResponse Linea, (string Identificador, decimal Porcentaje, decimal Importe) Valor)>();
+        foreach (var valor in valores)
+        {
+            lineas.Add((await CrearLineaOkAsync(client, borrador.Id, LineaCuenta(CuentaContableIds.Ventas)), valor));
+        }
+
+        await CrearLineaOkAsync(client, borrador.Id, new { tipo = TipoLineaFactura.Comentario, descripcion = "No suma" });
+        var borrada = await CrearLineaOkAsync(client, borrador.Id, LineaCuenta(CuentaContableIds.Ventas));
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"{Base}/lineas-borrador/{borrada.Id}")).StatusCode);
+        foreach (var (linea, valor) in lineas)
+        {
+            await EjecutarSqlAsync(
+                """UPDATE "LineasFacturaVentaBorrador" SET "IdentificadorIva" = @I, "PorcentajeIva" = @P, "ImporteLinea" = @L WHERE "Id" = @Id""",
+                new { I = valor.Identificador, P = valor.Porcentaje, L = valor.Importe, linea.Id });
+        }
+
+        var esperado = CalculadoraIvaFactura.Calcular(
+            [.. lineas.Select(l => new LineaCalculoIva(l.Linea.NumeroLinea, l.Valor.Identificador, l.Valor.Porcentaje, l.Valor.Importe))]);
+        Assert.Equal(25.97m, esperado.ImporteTotal); // 11.81 + 1.05 + 0.76 + 12.35
+
+        var totales = await client.GetFromJsonAsync<TotalesFactura>($"{Base}/borradores/{borrador.Id}/totales");
+        Assert.Equal(esperado.ImporteTotal, totales!.ImporteTotal);
+        Assert.Equal(esperado.ImporteTotal, (await GetBorradorAsync(client, borrador.Id)).ImporteTotal);
+        var lista = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?numero={borrador.Numero}");
+        Assert.Equal(esperado.ImporteTotal, Assert.Single(lista!.Items).ImporteTotal);
+    }
+
+    [Fact]
+    public async Task ConteoEnPreparacion_EsElTotalDeUnaPaginaDeUno_AbiertasYLiberadas()
+    {
+        var client = Admin();
+        var socio = await CrearSocioAsync(client, "Cliente conteo");
+        var producto = await CrearProductoAsync(client, 10m);
+        await CrearBorradorOkAsync(client, new { socioNegocioId = socio });
+        var liberado = await CrearBorradorOkAsync(client, new
+        {
+            socioNegocioId = socio, primeraLinea = new { tipo = TipoLineaFactura.Producto, productoId = producto, cantidad = 1m, precioUnitario = 10m },
+        });
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"{Base}/borradores/{liberado.Id}/liberar", null)).StatusCode);
+
+        var pagina = await client.GetFromJsonAsync<PagedResult<FacturaVentaBorradorResponse>>($"{Base}/borradores?socioId={socio}&tamanoPagina=1");
+
+        Assert.Equal(2L, pagina!.Total);
+        Assert.Single(pagina.Items);
     }
 
     [Fact]
@@ -726,29 +848,43 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
     }
 
     [Fact]
-    public async Task Alta_ConSeriesElegidas_LasGuarda_YUnaSerieDeOtroTipo400EnSuCampo()
+    public async Task Series_SoloElAdministradorEligeLaDeRegistro_LaDeBorradorNuncaSeElige_400_403_409()
     {
-        var client = Admin();
-        var socio = await CrearSocioAsync(client, "Cliente series elegidas");
-        var (serieBorrador, _, prefijo) = await SeriesPrueba.CrearAsync(_fixture.AppConnectionString, TipoDocumentoSerie.BorradorFacturaVenta);
+        var admin = Admin();
+        var socio = await CrearSocioAsync(admin, "Cliente series alta rapida");
+        var (serieBorrador, _, _) = await SeriesPrueba.CrearAsync(_fixture.AppConnectionString, TipoDocumentoSerie.BorradorFacturaVenta);
         var (serieRegistro, _, _) = await SeriesPrueba.CrearAsync(_fixture.AppConnectionString, TipoDocumentoSerie.FacturaVenta);
 
-        var borrador = await CrearBorradorOkAsync(client, new { socioNegocioId = socio, serieBorradorId = serieBorrador, serieRegistroId = serieRegistro });
-
-        Assert.Equal(($"{prefijo}000001", serieBorrador, serieRegistro), (borrador.Numero, borrador.SerieBorradorId, borrador.SerieRegistroId));
+        // La de borradores nunca se elige (tampoco el Administrador); una de registro de otro tipo -> 400 en su campo.
         await AssertErrorAsync(
-            await client.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieRegistroId = serieBorrador }),
+            await admin.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieBorradorId = serieBorrador }),
+            HttpStatusCode.BadRequest, "serie", "SerieBorradorId");
+        await AssertErrorAsync(
+            await admin.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieRegistroId = serieBorrador }),
             HttpStatusCode.BadRequest, null, "SerieRegistroId");
 
-        // Modificar: la serie de registro se cambia con el PUT (otra del tipo de borrador -> 400 en su campo).
-        await AssertErrorAsync(
-            await client.PutAsJsonAsync($"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, serieRegistroId = serieBorrador }),
-            HttpStatusCode.BadRequest, null, "SerieRegistroId");
-        var modificado = await client.PutAsJsonAsync(
+        // El Administrador elige la de registro en el alta y la cambia en la modificación.
+        var borrador = await CrearBorradorOkAsync(admin, new { socioNegocioId = socio, serieRegistroId = serieRegistro });
+        Assert.Equal((SerieFacturaVentaIds.SerieBorradorId, serieRegistro), (borrador.SerieBorradorId, borrador.SerieRegistroId));
+        var cambiado = await admin.PutAsJsonAsync(
             $"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, serieRegistroId = SerieFacturaVentaIds.SeriePosteadaId });
-        Assert.True(modificado.IsSuccessStatusCode, await modificado.Content.ReadAsStringAsync());
-        var leido = await GetBorradorAsync(client, borrador.Id);
-        Assert.Equal(("FV", SerieFacturaVentaIds.SeriePosteadaId), (leido.SerieRegistroCodigo, leido.SerieRegistroId));
+        Assert.True(cambiado.IsSuccessStatusCode, await cambiado.Content.ReadAsStringAsync());
+
+        // 409: el xmin que vio el Administrador ya no vale.
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await admin.PutAsJsonAsync($"{Base}/borradores/{borrador.Id}", new { xmin = borrador.Xmin, serieRegistroId = serieRegistro })).StatusCode);
+
+        // Ejecutor (CanAdd): alta con serie de registro -> 400. Supervisor (CanModify, sin CanAdd): alta -> 403; modificación con serie -> 400.
+        var ejecutor = Rol("Ejecutor");
+        await AssertErrorAsync(
+            await ejecutor.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio, serieRegistroId = serieRegistro }),
+            HttpStatusCode.BadRequest, "administrador", "SerieRegistroId");
+        var supervisor = Rol("Supervisor");
+        Assert.Equal(HttpStatusCode.Forbidden, (await supervisor.PostAsJsonAsync($"{Base}/borradores", new { socioNegocioId = socio })).StatusCode);
+        var leido = await GetBorradorAsync(supervisor, borrador.Id);
+        await AssertErrorAsync(
+            await supervisor.PutAsJsonAsync($"{Base}/borradores/{leido.Id}", new { xmin = leido.Xmin, serieRegistroId = serieRegistro }),
+            HttpStatusCode.BadRequest, "administrador", "SerieRegistroId");
     }
 
     // ----- Helpers -----
@@ -804,6 +940,13 @@ public sealed class FacturasVentaBorradoresApiTests : IClassFixture<PostgresTest
     {
         var response = await client.PostAsJsonAsync(
             "/api/productos", new { codigo = Unico("PF"), nombre = "Producto factura", precioVenta, bloqueado });
+        Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+    }
+
+    private static async Task<Guid> CrearAlmacenAsync(HttpClient client)
+    {
+        var response = await client.PostAsJsonAsync("/api/almacenes", new { codigo = Unico("AL")[..10], nombre = "Almacén secundario", bloqueado = false, esPredeterminado = false });
         Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }

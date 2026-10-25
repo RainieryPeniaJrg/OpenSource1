@@ -40,10 +40,10 @@ public sealed class NavMenuTests
         Assert.DoesNotMatch(new Regex("<a href=\"/\"[^>]*aria-current=\"page\""), html);
     }
 
-    /// <summary>Puerta C: las altas de documentos marcan sus borradores (no el listado de posteados) y abren Facturación.</summary>
+    /// <summary>Puerta C: las altas de documentos marcan su documento (Facturas / Notas de crédito) y abren Facturación.</summary>
     [Theory]
-    [InlineData("/facturas-venta/nueva", "/facturas-venta/borradores", "facturacion")]
-    [InlineData("/notas-credito-venta/nueva", "/notas-credito-venta/borradores", "facturacion")]
+    [InlineData("/facturas-venta/nueva", "/facturas-venta", "facturacion")]
+    [InlineData("/notas-credito-venta/nueva", "/notas-credito-venta", "facturacion")]
     [InlineData("/cobros/nuevo", "/cobros", "ventas")]
     [InlineData("/unidades-medida/nuevo", "/unidades-medida", "configuracion")]
     public async Task AltaDeDocumento_MarcaSuModuloEnElMenu(string ruta, string marcado, string grupo)

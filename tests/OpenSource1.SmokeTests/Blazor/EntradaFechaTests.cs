@@ -58,4 +58,26 @@ public sealed class EntradaFechaTests
         Assert.Equal(string.Empty, EntradaFecha.Formatear((DateOnly?)null));
         Assert.Equal("2026-01-01", EntradaFecha.Formatear((DateOnly?)new DateOnly(2026, 1, 1)));
     }
+
+    [Fact]
+    public void Opcional_FechaValidaONull()
+    {
+        Assert.Equal(new DateOnly(2026, 10, 1), EntradaFecha.Opcional("2026-10-01"));
+        Assert.Null(EntradaFecha.Opcional(null));
+        Assert.Null(EntradaFecha.Opcional("  "));
+        Assert.Null(EntradaFecha.Opcional("no-es-fecha"));
+    }
+
+    [Fact]
+    public void Validar_SoloLasInformadasEInvalidas_ConElCampoYLaEtiqueta()
+    {
+        var errores = EntradaFecha.Validar(
+            ("2026-10-01", "FechaRegistroTexto", "La fecha de registro"),
+            (null, "FechaDocumentoTexto", "La fecha de documento"),
+            ("31/10/2026", "FechaVencimientoTexto", "La fecha de vencimiento")).ToList();
+
+        var error = Assert.Single(errores);
+        Assert.Equal(["FechaVencimientoTexto"], error.MemberNames);
+        Assert.Equal("La fecha de vencimiento no es válida.", error.ErrorMessage);
+    }
 }

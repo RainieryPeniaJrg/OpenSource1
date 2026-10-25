@@ -1,0 +1,15 @@
+@page "/notas-credito-venta/borradores/{BorradorId:guid}"
+@attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
+@using Microsoft.AspNetCore.Authorization
+@inject NavigationManager Nav
+
+@* Spec alta rápida: la ruta antigua de la nota en preparación (enlaces guardados y "Borrador de origen" de versiones anteriores)
+   redirige a /notas-credito-venta/en-preparacion/{id}, conservando un returnUrl local (uno externo cae a la lista). *@
+
+@code {
+    [Parameter] public Guid BorradorId { get; set; }
+    [SupplyParameterFromQuery(Name = "returnUrl")] private string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized() =>
+        Nav.NavigateTo(RutasPreparacion.Redireccion(RutasPreparacion.Nota, BorradorId, ReturnUrl, RutasPreparacion.ListaNotas), replace: true);
+}

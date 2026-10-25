@@ -31,6 +31,9 @@ public sealed class FacturaVentaBorradorResponse
     public Guid GrupoNegocioId { get; init; }
     public Guid GrupoIvaNegocioId { get; init; }
     public Guid GrupoClienteContableId { get; init; }
+    public string? GrupoNegocioCodigo { get; init; }
+    public string? GrupoIvaNegocioCodigo { get; init; }
+    public string? GrupoClienteContableCodigo { get; init; }
     public Guid AlmacenId { get; init; }
     public string? AlmacenCodigo { get; init; }
     public EstadoFacturaBorrador Estado { get; init; }
@@ -48,6 +51,12 @@ public sealed class FacturaVentaBorradorResponse
     public string Moneda { get; init; } = string.Empty;
     public string? Descripcion { get; init; }
     public int NumeroLineas { get; init; }
+
+    /// <summary>
+    /// Total con ITBIS de las líneas vivas (vista previa para las listas "En preparación"): misma aritmética que
+    /// <c>CalculadoraIvaFactura</c> (base e IVA redondeados a 2 por identificador de IVA). El definitivo lo fija el posteo.
+    /// </summary>
+    public decimal ImporteTotal { get; init; }
     public long Xmin { get; init; }
     public DateTime CreatedAtUtc { get; init; }
     public DateTime? UpdatedAtUtc { get; init; }

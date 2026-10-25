@@ -2,358 +2,60 @@
 @attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authorization
-@using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos
-@using OpenSource1.Application.Security
-@using OpenSource1.Blazor.Services
-@using OpenSource1.Core.Common
-@using OpenSource1.Core.Enums
-@inject IFacturaVentaApiClient FacturaApiClient
-@inject IAuthorizationService AuthorizationService
-@inject ILogger<FacturasVentaBorradores> Logger
 @inject NavigationManager Nav
 
-<PageTitle>Borradores de factura – AxionERP</PageTitle>
-
-<PageToolbar Titulo="Borradores de factura" Subtitulo="Facturas de venta en preparación: cabecera, líneas, liberación y posteo."
-             Migas="@Migas" Permisos="@permisos"
-             NuevoHref="@RetornoLocal.ConRetorno("/facturas-venta/nueva", UrlActual)" NuevoTexto="Nueva factura"
-             SeleccionId="@BorradorSeleccionado?.Id.ToString()"
-             Ver="@VerBorrador"
-             EditarUrl="@(SeleccionNoEditable ? null : id => RetornoLocal.ConRetorno($"/facturas-venta/borradores/{id}", UrlActual))"
-             EliminarUrl="@(SeleccionNoEditable ? null : id => BuildListUrl(deleteId: Guid.Parse(id)))">
-    <a href="/facturas-venta" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Facturas posteadas</a>
-</PageToolbar>
-
-@if (!string.IsNullOrWhiteSpace(message))
-{
-    <div class="mb-6">
-        @if (messageType == "success")
-        {
-            <ActionFeedback Type="success" Message="@message" />
-        }
-        else
-        {
-            <MessageBox Type="@messageType" Message="@message" Errors="@errores" />
-        }
-    </div>
-}
-
-<!-- ── Filtros ── -->
-<div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
-    <form method="get" action="/facturas-venta/borradores" data-enhance class="p-4 sm:p-6">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-3 max-w-4xl">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="filtroNumero">Número</label>
-                    <input id="filtroNumero" type="text" name="numero" value="@SearchNumero" placeholder="ej. 00000001" class="@VentasCss.Filtro" />
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="filtroNombre">Nombre de facturación</label>
-                    <input id="filtroNombre" type="text" name="nombre" value="@SearchNombre" placeholder="ej. Comercial" class="@VentasCss.Filtro" />
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="filtroEstado">Estado</label>
-                    <select id="filtroEstado" name="estado" class="@VentasCss.Filtro">
-                        <option value="" selected="@(SearchEstado is null)">Abiertas y liberadas</option>
-                        <option value="1" selected="@(SearchEstado == 1)">Abierta</option>
-                        <option value="2" selected="@(SearchEstado == 2)">Liberada</option>
-                        <option value="3" selected="@(SearchEstado == 3)">Posteada</option>
-                    </select>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <button type="submit" class="btn-press inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">Consultar</button>
-                <a href="/facturas-venta/borradores" title="Limpiar campos" class="btn-press inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Limpiar campos</a>
-            </div>
-        </div>
-    </form>
-</div>
-
-<!-- ── Tabla ── -->
-<div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-8">
-    <div class="px-6 py-4 border-b border-slate-100">
-        <h2 class="text-sm font-semibold text-slate-700">Borradores</h2>
-        <p class="mt-1 text-xs text-slate-500">@total resultado(s) · página @Pagina de @Math.Max(totalPaginas, 1).</p>
-    </div>
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-100 text-sm" data-testid="tabla-borradores">
-            <thead class="bg-slate-50">
-                <tr>
-                    <th class="px-4 py-3"><span class="sr-only">Seleccionar</span></th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Número</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Vender a</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Facturar a</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha reg.</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Almacén</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Líneas</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Acciones</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-50 bg-white">
-                @if (borradores.Count == 0)
-                {
-                    <tr><td colspan="9" class="px-4 py-8 text-center text-slate-400 text-sm">No hay borradores con esos criterios.</td></tr>
-                }
-                else
-                {
-                    @foreach (var b in borradores)
-                    {
-                        var marcada = b.Id == BorradorSeleccionado?.Id;
-                        @* Todos los borradores se seleccionan (Abrir / Cliente); Modificar y Eliminar solo aplican a los abiertos. *@
-                        <tr @key="b.Id" class="@SeleccionFila.ClaseFila transition-colors @(marcada ? SeleccionFila.ClaseFilaSeleccionada : null)">
-                            <td class="px-4 py-3"><SeleccionFila Href="@BuildListUrl(sel: b.Id)" Seleccionada="@marcada" Etiqueta="@b.Numero" /></td>
-                            <td class="px-4 py-3"><a href="@($"/facturas-venta/borradores/{b.Id}")" class="font-mono text-xs font-semibold text-brand-700 hover:underline">@b.Numero</a></td>
-                            <td class="px-4 py-3 text-slate-700">@b.SocioNegocioCodigo <span class="text-slate-400 text-xs">@b.SocioNegocioNombre</span></td>
-                            <td class="px-4 py-3 text-slate-700">@b.SocioNegocioFacturarACodigo <span class="text-slate-400 text-xs">@b.NombreFacturacion</span></td>
-                            <td class="px-4 py-3 text-slate-500 text-xs">@EntradaFecha.Formatear(b.FechaRegistro)</td>
-                            <td class="px-4 py-3 text-slate-500 text-xs">@b.AlmacenCodigo</td>
-                            <td class="px-4 py-3 text-xs"><span class="@EstadoCss(b.Estado)">@VentasOpciones.Estado(b.Estado)</span></td>
-                            <td class="px-4 py-3 text-right text-slate-700">@b.NumeroLineas</td>
-                            <td class="px-4 py-3 text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <a href="@($"/facturas-venta/borradores/{b.Id}")" class="btn-press rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100" title="Abrir borrador">Abrir</a>
-                                    @if (permisos?.CanModify == true && b.Estado == EstadoFacturaBorrador.Abierta)
-                                    {
-                                        <a href="@RetornoLocal.ConRetorno($"/facturas-venta/borradores/{b.Id}", UrlActual)" class="btn-press rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100" title="Modificar cabecera">Modificar</a>
-                                    }
-                                    @if (permisos?.CanDelete == true && b.Estado == EstadoFacturaBorrador.Abierta)
-                                    {
-                                        <a href="@BuildListUrl(deleteId: b.Id)" class="btn-press rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100" title="Eliminar borrador">Eliminar</a>
-                                    }
-                                </div>
-                            </td>
-                        </tr>
-                    }
-                }
-            </tbody>
-        </table>
-    </div>
-    @if (totalPaginas > 1)
-    {
-        <div class="flex items-center justify-between gap-3 border-t border-slate-100 px-6 py-4">
-            <p class="text-xs text-slate-500">Página @Pagina de @totalPaginas</p>
-            <div class="flex items-center gap-2">
-                @if (Pagina > 1)
-                {
-                    <a href="@BuildListUrl(pagina: Pagina - 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">« Anterior</a>
-                }
-                @if (Pagina < totalPaginas)
-                {
-                    <a href="@BuildListUrl(pagina: Pagina + 1)" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">Siguiente »</a>
-                }
-            </div>
-        </div>
-    }
-</div>
-
-@if (MuestraDialogoBorrar)
-{
-    <ConfirmDialog Title="Confirmar eliminación" Message="Se eliminará el borrador seleccionado con todas sus líneas. Esta acción no se puede deshacer." Variant="danger" CancelHref="@UrlActual">
-        <p class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-mono text-red-900">@(borradorAEliminar is null ? DeleteId?.ToString() : $"{borradorAEliminar.Numero} — {borradorAEliminar.NombreFacturacion} ({borradorAEliminar.NumeroLineas} línea(s))")</p>
-        <EditForm Model="DeleteInput" FormName="delete-borrador" OnValidSubmit="DeleteAsync" class="mt-4">
-            <input type="hidden" name="DeleteInput.Id" value="@DeleteId" />
-            <button type="submit" class="btn-press rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700">Sí, eliminar</button>
-            <a href="@UrlActual" class="btn-press ml-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50">Cancelar</a>
-        </EditForm>
-    </ConfirmDialog>
-}
-
-@* Formulario de borrado que el permiso o la URL ya no dejan mostrar: EditForm vacío con el MISMO FormName y handler, para que
-   un POST obsoleto o forzado reciba el mensaje real de la API y no el 400 genérico de Blazor. La cabecera se modifica en la
-   página única del borrador (/facturas-venta/borradores/{id}; spec no-series) y el alta en /facturas-venta/nueva. *@
-@if (!MuestraDialogoBorrar)
-{
-    <EditForm Model="DeleteInput" FormName="delete-borrador" OnValidSubmit="DeleteAsync"></EditForm>
-}
+@* Spec alta rápida: la lista de borradores es ahora la pestaña "En preparación" de /facturas-venta. La ruta se conserva para los
+   enlaces guardados: ?editId= abre la factura en preparación; ?estado=3 (borradores ya posteados) lleva a las registradas; los
+   filtros numero/nombre se conservan. Aloja también BorradorForm, el modelo de la cabecera editable de la factura en preparación. *@
 
 @code {
-    [SupplyParameterFromForm(FormName = "delete-borrador")] private DeleteForm? DeleteInput { get; set; }
-
     [SupplyParameterFromQuery(Name = "numero")] private string? SearchNumero { get; set; }
     [SupplyParameterFromQuery(Name = "nombre")] private string? SearchNombre { get; set; }
-    // [SupplyParameterFromQuery] no admite enums: el estado viaja como entero (1 = Abierta, 2 = Liberada, 3 = Posteada; vacío = Abierta y Liberada).
     [SupplyParameterFromQuery(Name = "estado")] private int? SearchEstado { get; set; }
-    [SupplyParameterFromQuery(Name = "pagina")] private int Pagina { get; set; } = 1;
-    // Tolerante (ola final Fix-Features): un ?sel= ilegible se ignora como selección vacía; con Guid? el binder lanzaría.
-    [SupplyParameterFromQuery(Name = "sel")] private string? SelTexto { get; set; }
-    private Guid? Sel => InventarioVistasOpciones.ParseGuid(SelTexto);
-    // Solo para redirigir la ruta antigua (?editId=) directamente a la página única /facturas-venta/borradores/{id} (un solo salto, con returnUrl).
     [SupplyParameterFromQuery(Name = "editId")] private Guid? EditId { get; set; }
-    [SupplyParameterFromQuery(Name = "deleteId")] private Guid? DeleteId { get; set; }
-    [SupplyParameterFromQuery(Name = "ok")] private string? Ok { get; set; }
 
-    private static readonly IReadOnlyList<Miga> Migas = [new("Facturación", "/modulos/facturacion"), new("Borradores de factura")];
-
-    private IReadOnlyList<FacturaVentaBorradorResponse> borradores = [];
-    private long total;
-    private int totalPaginas;
-    private FacturaVentaBorradorResponse? borradorAEliminar;
-    private string? message;
-    private string messageType = "info";
-    private IReadOnlyList<string> errores = [];
-    private PermisosPagina? permisos;
-
-    private bool MuestraDialogoBorrar => DeleteId.HasValue && permisos?.CanDelete == true;
-
-    /// <summary>Selección válida: un borrador de la página cargada (una selección obsoleta deja las acciones deshabilitadas).</summary>
-    private FacturaVentaBorradorResponse? BorradorSeleccionado => Sel is { } s ? borradores.FirstOrDefault(b => b.Id == s) : null;
-
-    /// <summary>R7: Modificar/Eliminar se ocultan solo si HAY un borrador seleccionado y no está Abierta; sin selección salen deshabilitados.</summary>
-    private bool SeleccionNoEditable => BorradorSeleccionado is { } b && b.Estado != EstadoFacturaBorrador.Abierta;
-
-    private IReadOnlyList<AccionPagina> VerBorrador =>
-    [
-        new("Abrir borrador", IconosModulo.Documento, id => $"/facturas-venta/borradores/{id}", null, RequiereSeleccion: true),
-        new("Cliente", IconosModulo.Persona, _ => $"/clientes/{BorradorSeleccionado?.SocioNegocioId}", ApplicationPolicies.CanConsult, RequiereSeleccion: true),
-    ];
-
-    /// <summary>URL de vuelta del listado (filtros, página y selección; sin ok/deleteId/editId).</summary>
-    private string UrlActual => RetornoLocal.SinTransitorios(BuildListUrl());
-
-    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        if (EditId is { } editId)
+        if (EditId is { } id)
         {
-            Nav.NavigateTo(RetornoLocal.ConRetorno($"/facturas-venta/borradores/{editId}", UrlActual), replace: true);
+            Nav.NavigateTo($"{RutasPreparacion.Factura}/{id}", replace: true);
             return;
         }
 
-        DeleteInput ??= new();
-        permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
-
-        await LoadAsync();
-
-        if (Ok is not null)
-        {
-            (messageType, message) = Ok switch
-            {
-                "eliminado" => ("success", "Borrador eliminado satisfactoriamente."),
-                _ => ("info", null)
-            };
-        }
-
-        if (MuestraDialogoBorrar)
-        {
-            try { borradorAEliminar = await FacturaApiClient.GetBorradorAsync(DeleteId!.Value); }
-            catch (Exception ex) { Logger.LogWarning(ex, "Could not load borrador {Id} to delete.", DeleteId); }
-        }
+        var destino = SearchEstado == 3 ? "/facturas-venta" : RutasPreparacion.ListaFacturas;
+        if (!string.IsNullOrWhiteSpace(SearchNumero)) destino = RetornoLocal.ConParametro(destino, "numero", SearchNumero.Trim());
+        if (!string.IsNullOrWhiteSpace(SearchNombre)) destino = RetornoLocal.ConParametro(destino, "nombre", SearchNombre.Trim());
+        Nav.NavigateTo(destino, replace: true);
     }
 
-    private async Task LoadAsync()
-    {
-        try
-        {
-            var estado = SearchEstado is 1 or 2 or 3 ? SearchEstado : null;
-            var filtro = new FacturaVentaBorradorFiltro(EmptyAsNull(SearchNumero), EmptyAsNull(SearchNombre), null, estado);
-            if (Pagina < 1) Pagina = 1;
-            // Orden explícito (PageRequest.Descendente es true por defecto): lo último creado primero.
-            var pagina = await FacturaApiClient.ListBorradoresAsync(filtro, new PageRequest(Pagina, PageRequest.TamanoPorDefecto, "CreatedAtUtc", Descendente: true));
-            if (pagina.TotalPaginas > 0 && Pagina > pagina.TotalPaginas)
-            {
-                Pagina = pagina.TotalPaginas;
-                pagina = await FacturaApiClient.ListBorradoresAsync(filtro, new PageRequest(Pagina, PageRequest.TamanoPorDefecto, "CreatedAtUtc", Descendente: true));
-            }
-
-            borradores = pagina.Items;
-            total = pagina.Total;
-            totalPaginas = pagina.TotalPaginas;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Could not load borradores de factura.");
-            Show("danger", "No fue posible cargar los borradores de factura.");
-        }
-    }
-
-    private async Task DeleteAsync()
-    {
-        // R17: la navegación va FUERA del try (NavigateTo puede lanzar NavigationException y el catch se la tragaría).
-        string? destino = null;
-        try
-        {
-            var result = await FacturaApiClient.DeleteBorradorAsync(DeleteInput!.Id);
-            if (result.Succeeded)
-            {
-                destino = RetornoLocal.ConParametro(UrlActual, "ok", "eliminado");
-            }
-            else
-            {
-                errores = result.Errors ?? [];
-                Show("warning", result.Message);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Could not delete borrador.");
-            Show("danger", "No fue posible eliminar el borrador.");
-        }
-
-        if (destino is not null)
-        {
-            Nav.NavigateTo(destino);
-        }
-    }
-
-    private string BuildListUrl(int? pagina = null, Guid? sel = null, Guid? deleteId = null)
-    {
-        var parameters = new List<string>();
-        if (!string.IsNullOrWhiteSpace(SearchNumero)) parameters.Add($"numero={Uri.EscapeDataString(SearchNumero)}");
-        if (!string.IsNullOrWhiteSpace(SearchNombre)) parameters.Add($"nombre={Uri.EscapeDataString(SearchNombre)}");
-        if (SearchEstado is 1 or 2 or 3) parameters.Add($"estado={SearchEstado}");
-        var paginaEfectiva = pagina ?? Pagina;
-        if (paginaEfectiva > 1) parameters.Add($"pagina={paginaEfectiva}");
-        var selEfectiva = sel ?? Sel;
-        if (selEfectiva.HasValue) parameters.Add($"sel={selEfectiva.Value}");
-        if (deleteId.HasValue) parameters.Add($"deleteId={deleteId.Value}");
-        return parameters.Count == 0 ? "/facturas-venta/borradores" : $"/facturas-venta/borradores?{string.Join("&", parameters)}";
-    }
-
-    private static string EstadoCss(EstadoFacturaBorrador estado) => estado switch
-    {
-        EstadoFacturaBorrador.Liberada => "inline-flex rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700",
-        EstadoFacturaBorrador.Posteada => "inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600",
-        _ => "inline-flex rounded-full bg-green-50 px-2 py-0.5 font-semibold text-green-700",
-    };
-
-    private void Show(string type, string text) { messageType = type; message = text; }
-
-    private static string? EmptyAsNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    /// <summary>Cabecera de un borrador: modelo de /facturas-venta/nueva (AddInput) y de la cabecera editable de la página única (UpdateInput).</summary>
+    /// <summary>
+    /// Cabecera editable de la factura en preparación (<c>UpdateInput</c>): fechas, vencimiento, descripción, serie de registro (solo el
+    /// Administrador) y la acción.
+    /// </summary>
     public sealed class BorradorForm : IValidatableObject
     {
-        [Required(ErrorMessage = "Seleccione el cliente vender-a.")]
-        public Guid? SocioNegocioId { get; set; }
-
-        public Guid? SocioNegocioFacturarAId { get; set; }
-
         public string? FechaRegistroTexto { get; set; }
 
         public string? FechaDocumentoTexto { get; set; }
 
         public string? FechaVencimientoTexto { get; set; }
 
-        public Guid? AlmacenId { get; set; }
-
         [MaxLength(200, ErrorMessage = "La descripción admite como máximo 200 caracteres.")]
         public string? Descripcion { get; set; }
 
-        /// <summary>Alta: serie de borradores (null = la configurada). Solo se envía en el alta.</summary>
-        public Guid? SerieBorradorId { get; set; }
-
-        /// <summary>Serie con la que se numerará la factura (null en el alta = la configurada; en la cabecera, la del borrador).</summary>
+        /// <summary>Serie con la que se numerará la factura (solo el Administrador, en "Más opciones"); la página no la envía para el resto.</summary>
         public Guid? SerieRegistroId { get; set; }
+
+        /// <summary>Botón que envió la cabecera: <see cref="AccionCabecera.Registrar"/>, <see cref="AccionCabecera.Despues"/> o vacío (guardar y seguir).</summary>
+        public string? Accion { get; set; }
 
         public long Xmin { get; set; }
 
-        public DateOnly? FechaRegistro => Fecha(FechaRegistroTexto);
+        public DateOnly? FechaRegistro => EntradaFecha.Opcional(FechaRegistroTexto);
 
-        public DateOnly? FechaDocumento => Fecha(FechaDocumentoTexto);
+        public DateOnly? FechaDocumento => EntradaFecha.Opcional(FechaDocumentoTexto);
 
-        public DateOnly? FechaVencimiento => Fecha(FechaVencimientoTexto);
+        public DateOnly? FechaVencimiento => EntradaFecha.Opcional(FechaVencimientoTexto);
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
@@ -368,26 +70,13 @@
                 yield return new ValidationResult("La fecha de documento es obligatoria al modificar.", [nameof(FechaDocumentoTexto)]);
             }
 
-            foreach (var (texto, campo, etiqueta) in new[]
-                     {
-                         (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
-                         (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
-                         (FechaVencimientoTexto, nameof(FechaVencimientoTexto), "La fecha de vencimiento"),
-                     })
+            foreach (var resultado in EntradaFecha.Validar(
+                (FechaRegistroTexto, nameof(FechaRegistroTexto), "La fecha de registro"),
+                (FechaDocumentoTexto, nameof(FechaDocumentoTexto), "La fecha de documento"),
+                (FechaVencimientoTexto, nameof(FechaVencimientoTexto), "La fecha de vencimiento")))
             {
-                if (!string.IsNullOrWhiteSpace(texto) && !EntradaFecha.TryParse(texto, out _, out var error, etiqueta))
-                {
-                    yield return new ValidationResult(error ?? $"{etiqueta} no es válida.", [campo]);
-                }
+                yield return resultado;
             }
         }
-
-        private static DateOnly? Fecha(string? texto) =>
-            !string.IsNullOrWhiteSpace(texto) && EntradaFecha.TryParse(texto, out var valor, out _) ? valor : null;
-    }
-
-    public sealed class DeleteForm
-    {
-        public Guid Id { get; set; }
     }
 }

@@ -3,18 +3,13 @@
 @using Microsoft.AspNetCore.Authorization
 @inject NavigationManager Nav
 
-@* Spec no-series (Parte 4): la cabecera se edita en la página única del borrador. Se conserva la ruta (marcadores, enlaces antiguos
-   y la redirección de ?editId= del listado) y se redirige conservando el returnUrl local. *@
+@* Spec alta rápida: la cabecera se edita en la factura en preparación (/facturas-venta/en-preparacion/{id}). Se conserva la ruta
+   (marcadores, enlaces antiguos y la redirección de ?editId= del listado) y se redirige conservando el returnUrl local. *@
 
 @code {
     [Parameter] public Guid BorradorId { get; set; }
     [SupplyParameterFromQuery(Name = "returnUrl")] private string? ReturnUrl { get; set; }
 
-    protected override void OnInitialized()
-    {
-        var destino = $"/facturas-venta/borradores/{BorradorId}";
-        Nav.NavigateTo(
-            string.IsNullOrWhiteSpace(ReturnUrl) ? destino : RetornoLocal.ConRetorno(destino, RetornoLocal.Validar(ReturnUrl, "/facturas-venta/borradores")),
-            replace: true);
-    }
+    protected override void OnInitialized() =>
+        Nav.NavigateTo(RutasPreparacion.Redireccion(RutasPreparacion.Factura, BorradorId, ReturnUrl, RutasPreparacion.ListaFacturas), replace: true);
 }

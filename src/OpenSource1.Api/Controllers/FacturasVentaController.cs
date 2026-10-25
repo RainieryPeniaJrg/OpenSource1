@@ -22,7 +22,8 @@ namespace OpenSource1.Api.Controllers;
 /// Facturación de ventas (Fase 6). Task 6.2: borradores (cabecera y líneas) y vista previa de totales. Task 6.3: consultas de
 /// facturas posteadas (<c>GET /</c> y <c>GET /{numero}</c>; los segmentos literales <c>borradores</c> y <c>lineas-borrador</c>
 /// tienen precedencia sobre <c>{numero}</c>). Permisos: consultar = CanConsult; alta de borrador y de línea = CanAdd; modificar,
-/// liberar, reabrir y postear (Task 6.4) = CanModify; borrar = CanDelete.
+/// liberar, reabrir y postear (Task 6.4) = CanModify; borrar = CanDelete. Alta rápida: <c>POST borradores</c> admite <c>primeraLinea</c>
+/// (mismo cuerpo que <c>POST borradores/{id}/lineas</c>); el alta sin líneas sigue disponible por compatibilidad.
 /// </summary>
 [ApiController]
 [Route("api/facturas-venta")]
@@ -136,7 +137,12 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
         var result = await sender.Send(
             new CreateFacturaVentaBorradorCommand(
                 request.SocioNegocioId, request.SocioNegocioFacturarAId, request.FechaRegistro, request.FechaDocumento,
-                request.FechaVencimiento, request.AlmacenId, request.Descripcion, request.SerieBorradorId, request.SerieRegistroId),
+                request.FechaVencimiento, request.AlmacenId, request.Descripcion, request.SerieBorradorId, request.SerieRegistroId,
+                request.PrimeraLinea is { } l
+                    ? new PrimeraLineaFacturaVenta(
+                        l.Tipo, l.ProductoId, l.CuentaContableId, l.Descripcion, l.AlmacenId, l.UnidadMedidaId, l.Cantidad, l.PrecioUnitario,
+                        l.PorcentajeDescuentoLinea, l.GrupoIvaProductoId)
+                    : null),
             cancellationToken);
 
         return result.EsFallo
@@ -300,7 +306,8 @@ public sealed record CreateFacturaVentaBorradorRequest(
     Guid? AlmacenId = null,
     string? Descripcion = null,
     Guid? SerieBorradorId = null,
-    Guid? SerieRegistroId = null);
+    Guid? SerieRegistroId = null,
+    CreateLineaFacturaVentaBorradorRequest? PrimeraLinea = null);
 
 /// <summary>Todos los campos salvo <c>Xmin</c> con semántica "null = conservar" (<c>descripcion</c> "" = limpiar).</summary>
 public sealed record UpdateFacturaVentaBorradorRequest(

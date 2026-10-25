@@ -55,7 +55,7 @@ public sealed class BusquedaApiTests : IClassFixture<PostgresTestFixture>
         var factura = Assert.Single(Grupo(resultado, TiposResultadoBusqueda.Facturas));
         Assert.Equal((numero, $"/facturas-venta/{numero}"), (factura.Titulo, factura.Ruta));
         var borradorItem = Assert.Single(Grupo(resultado, TiposResultadoBusqueda.BorradoresFactura));
-        Assert.StartsWith("/facturas-venta/borradores/", borradorItem.Ruta);
+        Assert.StartsWith("/facturas-venta/en-preparacion/", borradorItem.Ruta);
         Assert.Empty(Grupo(resultado, TiposResultadoBusqueda.NotasCredito));
         Assert.Empty(Grupo(resultado, TiposResultadoBusqueda.BorradoresNotaCredito));
     }
@@ -124,7 +124,7 @@ public sealed class BusquedaApiTests : IClassFixture<PostgresTestFixture>
             [new Linea(10000, TipoLineaFactura.CuentaContable, 50m, CuentaContableId: CuentaContableIds.Ventas)],
             [new LineaIva("ITBIS18", 18m, 50m, 9m)], null, $"Cliente {marcador}");
         var borradorFactura = await CrearAsync(client, "/api/facturas-venta/borradores", new { socioNegocioId = socio });
-        var borradorNota = await CrearAsync(client, "/api/notas-credito-venta/borradores", new { facturaVentaNumero = factura, fechaRegistro = "2026-09-12" });
+        var borradorNota = await CrearAsync(client, "/api/notas-credito-venta/borradores", new { facturaVentaNumero = factura, fechaRegistro = "2026-09-12", copiarLineas = false });
         var numeroNota = borradorNota.GetProperty("numero").GetString()!;
 
         Assert.Contains(Grupo(await BuscarAsync(client, marcador), TiposResultadoBusqueda.BorradoresFactura),

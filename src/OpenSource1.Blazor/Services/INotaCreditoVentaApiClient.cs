@@ -17,6 +17,12 @@ public interface INotaCreditoVentaApiClient
     Task<PagedResult<NotaCreditoVentaBorradorResponse>> ListBorradoresAsync(
         NotaCreditoVentaBorradorFiltro? filtro = null, PageRequest? paginacion = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Notas en preparación (borradores Abierta) para la pestaña "En preparación (n)": el <c>Total</c> de una página de tamaño 1 del
+    /// listado existente. Un error de la API lanza <see cref="HttpRequestException"/> (la página muestra la pestaña sin número).
+    /// </summary>
+    Task<long> ContarEnPreparacionAsync(CancellationToken cancellationToken = default);
+
     /// <summary><see langword="null"/> = el borrador no existe (404).</summary>
     Task<NotaCreditoVentaBorradorResponse?> GetBorradorAsync(Guid id, CancellationToken cancellationToken = default);
 

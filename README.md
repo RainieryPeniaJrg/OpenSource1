@@ -4,177 +4,104 @@ Proyecto final para la materia **DESARROLLO DE SOFTWARE CON TECNOLOGÍAS PROPIET
 
 **Nombre del proyecto:** Sistema de Gestión Empresarial con Control de Acceso por Roles.
 
-AxionERP es una aplicación cliente-servidor construida con **.NET 10**, **ASP.NET Core Web API**, **Blazor Web App Static SSR**, **PostgreSQL**, **ASP.NET Core Identity**, **JWT**, **Entity Framework Core**, **Dapper**, **Tailwind CSS** y arquitectura Onion.
+AxionERP es una aplicación cliente-servidor construida con **.NET 10**, **ASP.NET Core Web API**, **Blazor Web App Static SSR**, **PostgreSQL 17**, **ASP.NET Core Identity**, **JWT**, **Entity Framework Core**, **Dapper**, **MediatR**, **Tailwind CSS** y arquitectura Onion.
 
 ## Resumen del proyecto
 
-El sistema implementa una base funcional para gestión empresarial con:
+El sistema cubre la gestión empresarial de una empresa comercial pequeña:
 
-- Autenticación de usuarios.
-- Roles y permisos.
-- CRUDs conectados a base de datos.
-- Buscadores y consultas.
-- Validaciones.
-- Navegación por módulos.
-- Seguridad básica.
-- Interfaz web amigable.
-- Integración entre frontend, API y base de datos.
+- Autenticación de usuarios, roles y permisos validados en la API.
+- Maestros de clientes, productos, almacenes y catálogos auxiliares.
+- Inventario con diarios de ajuste y transferencia, existencias y libros de cantidad y de costo.
+- Facturación de ventas con alta rápida (cliente, datos derivados y primera línea en una página), documentos en preparación que se guardan solos, registro con confirmación, notas de crédito desde la factura y cobros.
+- Cuentas por cobrar (libro de clientes y estado de cuenta).
+- Contabilidad: plan de cuentas, setups contables, movimientos, balance de comprobación y costo de inventario.
+- Series de numeración configurables por tipo de documento, sin huecos.
+- Búsqueda global, dashboards por grupo, reportería PDF/Excel y bitácora.
+- Interfaz web en español, sin JavaScript obligatorio (Static SSR).
 
 ## Tecnologías usadas
 
 | Área | Tecnología |
 | --- | --- |
-| Lenguaje | C# |
-| Backend | ASP.NET Core Web API |
+| Lenguaje | C# (.NET 10) |
+| Backend | ASP.NET Core Web API, MediatR, patrón `Result`/`Error` |
 | Frontend | Blazor Web App Static SSR |
-| Base de datos | PostgreSQL |
-| ORM / datos | Entity Framework Core y Dapper |
-| Seguridad | ASP.NET Core Identity, JWT, cookies HttpOnly |
+| Base de datos | PostgreSQL 17 |
+| ORM / datos | Entity Framework Core (escrituras y migraciones) y Dapper (lecturas) |
+| Seguridad | ASP.NET Core Identity, JWT, cookies HttpOnly, antiforgery |
 | Contenedores | Docker y Docker Compose |
 | Estilos | Tailwind CSS |
+| Pruebas | xUnit + Moq, PostgreSQL real en contenedor, Playwright (E2E) |
 | Control de versiones | Git |
 
 ## Arquitectura
 
-La solución está organizada con arquitectura Onion:
+La solución (`test.slnx`) está organizada con arquitectura Onion:
 
 | Proyecto | Responsabilidad |
 | --- | --- |
-| `OpenSource1.Core` | Entidades de dominio y abstracciones base. |
-| `OpenSource1.Application` | Casos de uso, DTOs, CQRS, contratos y reglas de aplicación. |
-| `OpenSource1.Infrastructure` | EF Core, Identity, Dapper, repositorios y Unit of Work. |
-| `OpenSource1.Api` | Endpoints HTTP, autenticación JWT y autorización por políticas. |
-| `OpenSource1.Blazor` | Interfaz web Blazor, formularios, menú y consumo de API. |
+| `OpenSource1.Core` | Entidades de dominio, enums y reglas puras (por ejemplo, el cálculo de números de serie). |
+| `OpenSource1.Application` | Casos de uso (`Features/<Entidad>`), comandos y consultas MediatR, DTOs, validaciones y contratos. |
+| `OpenSource1.Infrastructure` | EF Core, Identity, repositorios Dapper, Unit of Work, migraciones y generador de números. |
+| `OpenSource1.Api` | Controladores REST, autenticación JWT y autorización por políticas. |
+| `OpenSource1.Blazor` | Interfaz Static SSR, registro de módulos, clientes HTTP tipados hacia la API. |
+| `tests/OpenSource1.SmokeTests` | Pruebas unitarias, de integración (PostgreSQL real) y de páginas SSR. |
+| `tests/e2e` | Pruebas E2E Playwright (Node), fuera de `test.slnx`. |
 
-## Estado actual
+Reglas generales:
 
-Actualmente el proyecto cuenta con:
+- Las escrituras usan EF Core dentro de una transacción; las lecturas y listados usan Dapper.
+- La numeración de documentos es sin huecos: la serie y su línea se bloquean dentro de la transacción del documento.
+- Los documentos posteados (facturas, notas de crédito, asientos) son inmutables.
+- Blazor nunca expone el JWT al navegador: usa una cookie HttpOnly y una sesión del lado servidor.
 
-- Frontend Blazor en **Static SSR**.
-- API REST con autenticación y autorización.
-- Base de datos PostgreSQL para aplicación e identidad.
-- Docker Compose con API, Blazor y PostgreSQL.
-- Imágenes publicadas en Docker Hub: `ggeasy75/opensource`.
-- CRUD de entradas.
-- CRUD de configuraciones de aplicación.
-- Gestión de usuarios, roles y estado activo/inactivo.
-- Gestión de clientes con buscadores, filtros, reportes y Excel.
-- Gestión de productos con buscadores, filtros, dashboards, reportes y Excel.
-- Registro, login, logout, recuperación y cambio de contraseña.
-- Menú principal con opciones según rol.
-- Dashboard principal y dashboards por módulo.
-- Bitácora operativa.
-- Reportería histórica y exportación a Excel.
-- Validaciones y mensajes en español.
-- Navegación por grupos: menú lateral generado desde un registro único de módulos (visibilidad por permiso) y un
-  inicio compacto con tarjetas de grupo; cada grupo abre `/modulos/{grupo}` con sus enlaces e indicadores.
-- Búsqueda global de módulos y registros (clientes, productos y documentos): barra superior con resultados en
-  `/buscar?q=` y paleta **Ctrl+K** (también `/`) como mejora progresiva; funciona sin JavaScript.
-- Patrón de página común en los mantenimientos: barra de acciones (`+ Nuevo`, `Crear ▾`, `Ver ▾`, `Editar`,
-  `Eliminar`) según permisos, selección de fila con `?sel=`, alta y edición en página-tarjeta propia (`/x/nuevo`,
-  `/x/{id}/editar`) con vuelta segura al listado de origen (`returnUrl` local).
-- Acciones contextuales: nueva factura o nota de crédito desde un cliente, facturas filtradas por cliente, cobro en
-  página propia y ajuste de inventario precargado desde un producto.
-- Entregable Parte 1 en `docs/entregable-parte-1/` (documento Word, presentación, diagramas, capturas y evidencias) y
-  suite E2E Playwright en `tests/e2e/`.
-- Series de numeración configurables (`/series`): cada serie tiene tipo de documento, estado activo y líneas por fecha
-  con prefijo, ancho, rango, incremento, número de aviso y bloqueo; las series usadas no se borran y la serie asignada
-  a un tipo no se borra ni se desactiva. Configuración por tipo de documento (`/configuracion/numeracion`) con la
-  serie que usan facturas, notas, borradores, cobros, asientos, socios y diarios; numeración sin huecos intacta.
-- Borradores de factura y de nota de crédito con serie de borrador y serie de registro elegibles y "próximo número";
-  al postear se numera con la serie de registro y el borrador queda **Posteada** en solo lectura, enlazado a su
-  documento. Una factura posteada se puede copiar a un borrador nuevo con los datos actuales del cliente.
-- Documento en una sola página: cabecera editable, líneas con alta y edición en la fila y totales al pie en los
-  borradores de factura y de nota; factura, nota y borradores posteados con el mismo diseño en solo lectura.
+## Módulos
 
-## Entregable 3
+El menú lateral y el inicio se generan desde un registro único de módulos (`src/OpenSource1.Blazor/Navigation/CatalogoModulos.cs`); cada módulo se muestra según el permiso del usuario. Cada grupo tiene su página `/modulos/{grupo}` con enlaces e indicadores.
 
-La **Etapa III — Integración Total del Sistema** se encuentra documentada en:
-
-- [`docs/ENTREGABLE-3.md`](docs/ENTREGABLE-3.md)
-
-Carpeta sugerida para capturas del documento:
-
-- [`docs/screenshots/entregable-3/`](docs/screenshots/entregable-3/)
-
-### Resumen de cumplimiento
-
-| Requerimiento Etapa III | Estado |
+| Grupo | Módulos |
 | --- | --- |
-| Menú principal | Implementado |
-| Login integrado | Implementado |
-| Detección de roles | Implementado |
-| Permisos por rol | Implementado |
-| CRUD de usuarios | Implementado |
-| CRUD de clientes | Implementado |
-| CRUD de productos | Implementado |
-| Consultas y filtros | Implementado |
-| Reportes PDF | Implementado |
-| Exportación a Excel | Implementado |
-| Dashboard | Implementado |
-| Bitácora | Implementado |
-| Validaciones | Implementado |
-| Integración BD | Implementado |
+| Clientes | Clientes (`/clientes`), panel de clientes |
+| Productos | Productos (`/productos`), categorías de producto, panel de productos |
+| Inventario | Existencias, almacenes, diarios de inventario, movimientos de producto y de valor |
+| Ventas | Cobros, movimientos de cliente, estado de cuenta (CxC) |
+| Facturación | Facturas y notas de crédito (registradas y en preparación) |
+| Contabilidad | Plan de cuentas, movimientos contables, balance de comprobación, costo de inventario |
+| Reportes | Reportería PDF/Excel, bitácora |
+| Configuración | Términos de pago, unidades de medida, grupos contables, grupos de cliente contable, setups contables, fechas de registro, series de numeración, configuración de numeración |
+| Administración | Usuarios (`/admin/users`) |
 
-### Matriz principal de seguridad
+Funciones transversales:
 
-| Módulo / Acción | Admin | Supervisor | Ejecutor |
-| --- | --- | --- | --- |
-| Usuarios | Sí | No | No |
-| Clientes | Sí | Sí | Sí |
-| Productos | Sí | Sí | Sí |
-| Eliminar | Sí | No | No |
-
-Políticas efectivas del sistema:
-
-- `CanConsult`: Administrador, Supervisor, Ejecutor
-- `CanAdd`: Administrador, Ejecutor
-- `CanModify`: Administrador, Supervisor
-- `CanDelete`: Administrador
-
-## Cumplimiento del entregable 1
-
-La **Etapa I — Sistema de Login y Roles** está cubierta con los siguientes puntos:
-
-| Requerimiento | Estado |
-| --- | --- |
-| Pantalla de login | Implementada en Blazor. |
-| Usuario y contraseña | Implementados. |
-| Botón iniciar sesión | Implementado. |
-| Validación contra base de datos | Implementada con ASP.NET Core Identity. |
-| Mensajes de error | Implementados. |
-| Bloqueo de acceso incorrecto | Implementado mediante validación y control de autenticación. |
-| Contraseñas ocultas | Implementado en el formulario de login. |
-| Roles requeridos | `Administrador`, `Supervisor`, `Ejecutor`. |
-| Control de acceso por rol | Implementado en UI y API. |
-| Opciones según rol | Implementado en el menú y acciones disponibles. |
-| Permisos insuficientes | Controlados por políticas de autorización. |
-| Menú principal | Implementado. |
-| Formularios | Implementados en Blazor. |
-| Base de datos obligatoria | Implementada con PostgreSQL. |
-| Código fuente | Incluido en el repositorio. |
-| Script / inicialización de BD | Incluido mediante migraciones e inicialización Docker. |
+- **Búsqueda global** de módulos y registros (clientes, productos y documentos): barra superior con resultados en `/buscar?q=` y paleta **Ctrl+K** (también `/`) como mejora progresiva.
+- **Patrón de página común** en los mantenimientos: barra de acciones (`+ Nuevo`, `Crear ▾`, `Ver ▾`, `Editar`, `Eliminar`) según permisos, selección de fila con `?sel=`, alta y edición en página propia (`/x/nuevo`, `/x/{id}/editar`) con vuelta segura al listado (`returnUrl` local validado).
+- **Acciones contextuales**: nueva factura o nota de crédito desde un cliente, facturas filtradas por cliente, cobro en página propia y ajuste de inventario precargado desde un producto.
+- **Series de numeración** (`/series`): tipo de documento, estado activo y líneas por fecha con prefijo, ancho, rango, incremento, número de aviso y bloqueo. La serie usada no se borra y la serie asignada a un tipo no se borra ni se desactiva. La serie de cada tipo de documento se elige en `/configuracion/numeracion`.
+- **Documento en una sola página**: los borradores de factura y de nota de crédito muestran cabecera editable, líneas y totales en la misma página, con serie de borrador, serie de registro y próximo número. Al postear se numera con la serie de registro y el borrador queda **Posteada** en solo lectura, enlazado a su documento. Una factura posteada se puede copiar a un borrador nuevo.
+- **Fechas de registro permitidas**: los documentos solo se registran dentro del rango configurado por el Administrador.
 
 ## Roles y permisos
 
-| Rol | Consultar | Agregar | Modificar | Eliminar |
-| --- | --- | --- | --- | --- |
-| `Administrador` | Sí | Sí | Sí | Sí |
-| `Supervisor` | Sí | No | Sí | No |
-| `Ejecutor` | Sí | Sí | No | No |
+| Rol | Consultar | Agregar | Modificar | Eliminar | Administrar |
+| --- | --- | --- | --- | --- | --- |
+| `Administrador` | Sí | Sí | Sí | Sí | Sí |
+| `Supervisor` | Sí | No | Sí | No | No |
+| `Ejecutor` | Sí | Sí | No | No | No |
 
-Políticas internas usadas por la API:
+Políticas usadas por la API:
 
-- `CanConsult`
-- `CanAdd`
-- `CanModify`
-- `CanDelete`
+- `CanConsult`: Administrador, Supervisor, Ejecutor.
+- `CanAdd`: Administrador, Ejecutor.
+- `CanModify`: Administrador, Supervisor.
+- `CanDelete`: Administrador.
+- `CanAdministrar`: Administrador (fechas de registro, series y configuración de numeración).
 
-La interfaz oculta acciones según el rol, pero la seguridad principal se valida en la API con JWT y políticas de autorización.
+Además, la gestión de usuarios es exclusiva del Administrador y la bitácora es visible para Administrador y Supervisor. La interfaz oculta las acciones según el permiso, pero la seguridad se valida siempre en la API.
 
 ## Usuarios iniciales
 
-Cuando la carga inicial de usuarios está habilitada, se crean estos usuarios:
+Cuando la carga inicial está habilitada (`UserSeed__Enabled=true`, activa en Docker Compose), se crean:
 
 | Usuario | Rol |
 | --- | --- |
@@ -182,18 +109,11 @@ Cuando la carga inicial de usuarios está habilitada, se crean estos usuarios:
 | `supervisor` | `Supervisor` |
 | `ejecutor` | `Ejecutor` |
 
-Su contraseña es la que se define en `AUTH_SEED_DEFAULT_PASSWORD` del archivo `.env` (con la plantilla, el valor de
-`.env.example`). Use un valor propio y no lo publique; la carga inicial es solo para desarrollo y demostración.
-
-La contraseña solo se fija al **crear** cada usuario: si cambia `AUTH_SEED_DEFAULT_PASSWORD` después del primer arranque,
-los usuarios conservan la anterior (la API lo avisa en el log). Para aplicarla, ver
-[Problemas al levantar el proyecto](#problemas-al-levantar-el-proyecto).
-
-También existen usuarios de demostración adicionales para pruebas del módulo de usuarios.
+Su contraseña es la que se define en `AUTH_SEED_DEFAULT_PASSWORD` del archivo `.env`. Use un valor propio y no lo publique; la carga inicial es solo para desarrollo y demostración.
 
 ## Autenticación y seguridad
 
-Flujo actual:
+Flujo:
 
 1. Blazor envía las credenciales a `POST /api/auth/login`.
 2. La API valida el usuario con ASP.NET Core Identity.
@@ -201,9 +121,9 @@ Flujo actual:
 4. Blazor crea una sesión web con cookie segura HttpOnly.
 5. El JWT se guarda del lado servidor para llamar a la API.
 
-El JWT no se guarda en `localStorage`, `sessionStorage` ni en cookies accesibles desde JavaScript.
+El JWT no se guarda en `localStorage`, `sessionStorage` ni en cookies accesibles desde JavaScript. Los formularios usan tokens antiforgery y las escrituras concurrentes se controlan con la versión de fila de PostgreSQL (`xmin`, 409 si está obsoleta).
 
-Endpoints principales:
+Endpoints de autenticación:
 
 | Endpoint | Descripción |
 | --- | --- |
@@ -214,7 +134,9 @@ Endpoints principales:
 | `POST /api/auth/reset-password` | Restablecimiento de contraseña. |
 | `POST /api/auth/change-password` | Cambio de contraseña autenticado. |
 
-> Nota: el token de recuperación no debe mostrarse en pantalla. En producción debe enviarse por correo o por otro canal seguro. En desarrollo, use herramientas internas o logs controlados si necesita probar el flujo.
+El resto de endpoints se puede explorar en la documentación interactiva (`/scalar/v1`).
+
+> Nota: el token de recuperación no debe mostrarse en pantalla. En producción debe enviarse por correo o por otro canal seguro.
 
 ## Estructura del repositorio
 
@@ -226,9 +148,13 @@ Endpoints principales:
 │   ├── OpenSource1.Infrastructure/
 │   ├── OpenSource1.Api/
 │   └── OpenSource1.Blazor/
-├── tests/OpenSource1.SmokeTests/
+├── tests/OpenSource1.SmokeTests/  # xUnit (unitarias, integración con PostgreSQL, páginas SSR)
 ├── tests/e2e/                     # E2E Playwright (Node), fuera de test.slnx
-├── docs/entregable-parte-1/       # documento .docx, presentación, diagramas, capturas y evidencias
+├── docs/
+│   ├── entregable-parte-1/        # documento .docx, presentación, diagramas, capturas y evidencias
+│   ├── ENTREGABLE-Final-A00120258.md
+│   ├── screenshots/entregable-3/
+│   └── superpowers/               # especificaciones y planes de cada fase
 ├── Dockerfile.api
 ├── Dockerfile.blazor
 ├── docker-compose.yml
@@ -261,20 +187,17 @@ Variables:
 Defina los valores **antes** del primer `docker compose up`: las dos contraseñas se graban en la base de datos la primera
 vez.
 
-No subir el archivo `.env` real al repositorio.
+No subir el archivo `.env` real al repositorio (está en `.gitignore`).
 
-### Configuración de `OpenSource1.Api` (obligatoria en un clon nuevo)
+### Configuración de `OpenSource1.Api` para ejecución sin Docker
 
-`src/OpenSource1.Api/appsettings.json` **no está versionado** (contiene marcadores de
-secreto y se ignora vía `.gitignore` para evitar volver a comprometer credenciales). Sin
-este archivo la API no arranca. Crearlo a partir de la plantilla:
+`src/OpenSource1.Api/appsettings.json` **no está versionado** (se ignora para no volver a comprometer credenciales). Para ejecutar la API fuera de Docker, crearlo desde la plantilla:
 
 ```bash
 cp src/OpenSource1.Api/appsettings.Example.json src/OpenSource1.Api/appsettings.json
 ```
 
-Rellenar los valores marcados como `__SET_IN_USER_SECRETS__` con User Secrets (no editar
-los placeholders en el propio `appsettings.json` con valores reales):
+Los valores marcados como `__SET_IN_USER_SECRETS__` se rellenan con User Secrets, nunca en el propio archivo:
 
 ```bash
 cd src/OpenSource1.Api
@@ -283,21 +206,7 @@ dotnet user-secrets set "ConnectionStrings:IdentityConnection" "Host=localhost;P
 dotnet user-secrets set "Jwt:SigningKey" "<tu-clave-de-firma-jwt>"
 ```
 
-User Secrets tiene prioridad sobre `appsettings.json` en `Development`, así que los
-placeholders `__SET_IN_USER_SECRETS__` nunca llegan a usarse en tiempo de ejecución una
-vez configurados.
-
-`src/OpenSource1.Api/appsettings.Development.json` tampoco está versionado, por el mismo
-motivo (tenía las mismas credenciales de ejemplo hardcodeadas). Es opcional: si no existe,
-la API arranca igual con `appsettings.json` + User Secrets, solo se pierde el ajuste de
-`Jwt:ExpirationMinutes: 120` propio de Development. Para recrearlo:
-
-```bash
-cp src/OpenSource1.Api/appsettings.Development.Example.json src/OpenSource1.Api/appsettings.Development.json
-```
-
-Ya trae los mismos placeholders `__SET_IN_USER_SECRETS__`; los User Secrets configurados
-arriba también aplican aquí (misma `UserSecretsId`, no hace falta repetir el comando).
+User Secrets tiene prioridad sobre `appsettings.json` en `Development`. `appsettings.Development.json` también es opcional y se crea igual desde `appsettings.Development.Example.json` (comparte la misma `UserSecretsId`).
 
 ## Ejecución con Docker Compose
 
@@ -316,88 +225,73 @@ Servicios disponibles:
 | --- | --- |
 | Blazor | <http://localhost:8080> |
 | API | <http://localhost:8081> |
-| PostgreSQL | `localhost:5432` |
+| Documentación de la API (Scalar) | <http://localhost:8081/scalar/v1> |
+| PostgreSQL | `localhost:${POSTGRES_PORT}` (por defecto `5432`) |
 
-Reconstruir desde el código local:
+Atajos del `Makefile`:
 
-```bash
-docker compose build api blazor
-docker compose up -d
-```
+| Comando | Acción |
+| --- | --- |
+| `make up` | Levanta el stack con las imágenes existentes. |
+| `make soft` | Reconstruye con caché de capas y levanta. |
+| `make rebuild` | Reconstruye sin caché (equivale a `./rebuild.sh`). |
+| `make down` | Detiene y elimina contenedores (conserva los datos). |
+| `make logs` / `make logs-api` / `make logs-blazor` | Sigue los logs. |
+| `make ps` | Estado de los contenedores. |
+| `make push` | Sube las imágenes a Docker Hub. |
 
-Rebuild limpio:
-
-```bash
-./rebuild.sh
-```
-
-Detener contenedores:
-
-```bash
-docker compose down --remove-orphans
-```
-
-Eliminar también datos persistentes:
+Eliminar también los datos persistentes:
 
 ```bash
 docker compose down -v
 ```
 
+> Si usa varios contextos de Docker, ejecute los comandos con `DOCKER_CONTEXT=default` (o el contexto donde corre el stack).
+
 ## Ejecución sin Docker
 
-Requiere PostgreSQL local y cadenas de conexión configuradas por variables de entorno, user-secrets o `appsettings.Development.json`.
-
-Ejemplo de variables de entorno para PostgreSQL local:
-
-```bash
-export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=AxionERP_App;Username=Rainiery;Password=<tu-password>"
-export ConnectionStrings__IdentityConnection="Host=localhost;Port=5432;Database=AxionERP_Identity;Username=Rainiery;Password=<tu-password>"
-```
-
-Restaurar y compilar:
+Requiere PostgreSQL local con las bases `AxionERP_App` y `AxionERP_Identity`, y la configuración de la API descrita arriba.
 
 ```bash
 dotnet restore test.slnx
 dotnet build test.slnx
-```
-
-Ejecutar API:
-
-```bash
 dotnet run --project src/OpenSource1.Api/OpenSource1.Api.csproj
+dotnet run --project src/OpenSource1.Blazor/OpenSource1.Blazor.csproj
 ```
 
-Ejecutar Blazor:
+Aplicar migraciones manualmente:
 
 ```bash
-dotnet run --project src/OpenSource1.Blazor/OpenSource1.Blazor.csproj
+dotnet ef database update -p src/OpenSource1.Infrastructure -s src/OpenSource1.Api --context ApplicationDbContext
 ```
 
 ## Base de datos
 
-El contenedor PostgreSQL crea dos bases de datos:
+El contenedor PostgreSQL crea dos bases de datos (`init-postgres.sh`):
 
-- `AxionERP_App`
-- `AxionERP_Identity`
+- `AxionERP_App`: datos del negocio (maestros, inventario, ventas, contabilidad, series).
+- `AxionERP_Identity`: usuarios y roles de ASP.NET Core Identity.
 
-La API puede aplicar migraciones automáticamente en Docker mediante `Database__ApplyMigrationsOnStartup=true`.
+Las migraciones de la aplicación están en `src/OpenSource1.Infrastructure/Data/Migrations/Application`. Las más recientes son `SeriesNumeracionConfigurables`, `BorradoresConSeriesYPosteada`, `BorradoresEnlaceUnico` y `EnlazarBorradoresPosteadosHeredados`; todas tienen Down probado.
 
-Volúmenes usados:
+Volúmenes:
 
 | Volumen | Uso |
 | --- | --- |
 | `postgres-data` | Datos persistentes de PostgreSQL. |
 | `dataprotection-keys` | Llaves Data Protection compartidas entre API y Blazor. |
+| `uploads-data` | Archivos subidos desde Blazor. |
 
-## Pruebas rápidas
+## Pruebas
 
-Ver contenedores:
+Suite xUnit (requiere Docker: las pruebas de integración crean el contenedor `opensource1-tests-postgres` en el puerto `65432` y lo eliminan al terminar; no ejecute dos suites a la vez):
 
 ```bash
-docker compose ps
+dotnet build test.slnx
+dotnet test test.slnx
 ```
 
-Probar login desde la API:
+Una prueba concreta o un grupo:
 
 ```bash
 curl -X POST http://localhost:8081/api/auth/login \
@@ -405,17 +299,16 @@ curl -X POST http://localhost:8081/api/auth/login \
   -d '{"userNameOrEmail":"admin","password":"<AUTH_SEED_DEFAULT_PASSWORD>"}'
 ```
 
-Abrir la interfaz:
+Pruebas E2E con Playwright, contra el stack levantado en `http://localhost:8080`:
 
-```txt
-http://localhost:8080
+```bash
+cd tests/e2e
+npm ci
+npx playwright install chromium
+bash scripts/con-credenciales.sh npx playwright test
 ```
 
-Documentación interactiva de la API:
-
-```txt
-http://localhost:8081/scalar/v1
-```
+`con-credenciales.sh` toma `E2E_PASSWORD` de `AUTH_SEED_DEFAULT_PASSWORD` en el `.env` sin escribirla en ningún archivo; también se puede exportar `E2E_PASSWORD` a mano.
 
 ## Problemas al levantar el proyecto
 
@@ -430,13 +323,17 @@ Ver el log de la API: `docker compose logs api`.
 
 ## Docker Hub
 
-Repositorio:
+Comprobación rápida del login desde la API:
 
-```txt
-ggeasy75/opensource
+```bash
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userNameOrEmail":"admin","password":"<contraseña>"}'
 ```
 
-Imágenes principales:
+## Docker Hub
+
+Repositorio `ggeasy75/opensource`:
 
 ```bash
 docker pull ggeasy75/opensource:api
@@ -448,39 +345,46 @@ docker pull ggeasy75/opensource:blazor
 Ramas principales:
 
 - `main`: rama estable.
-- `qa` / `QA`: validación previa a release.
+- `qa`: validación previa a release.
 - `deploy`: rama lista para despliegue.
 
-El repositorio incluye workflows para validar PRs hacia `qa`, `deploy` y `main`, además de promoción automática de `deploy` hacia `main`.
+Las funcionalidades se desarrollan en ramas `feat/*` y se integran por PR. El repositorio incluye workflows (`.github/workflows`) que validan los PRs hacia `qa`, `deploy` y `main`, y promueven automáticamente `deploy` hacia `main`.
 
-Las pruebas smoke se encuentran en:
+## Entregables académicos
 
-```txt
-tests/OpenSource1.SmokeTests
-```
+- **Etapa I — Login y roles:** pantalla de login, validación con Identity, roles `Administrador`/`Supervisor`/`Ejecutor`, menú y acciones según permiso, bloqueo en UI y API (ver changelog 0.1).
+- **Etapa III — Integración total:** [`docs/ENTREGABLE-Final-A00120258.md`](docs/ENTREGABLE-Final-A00120258.md), con capturas en [`docs/screenshots/entregable-3/`](docs/screenshots/entregable-3/).
+- **Entregable final, Parte 1:** [`docs/entregable-parte-1/`](docs/entregable-parte-1/) (documento técnico `.docx`, presentación `.pptx`, guion de demostración, diagramas, capturas y reporte E2E). Se regeneran con `npm run diagramas` y `npm run entregable` en `tests/e2e`.
 
 ## Changelog
 
-### Versión 0.5 — Series de numeración y documento único
+### Versión 0.6 — Alta rápida de facturas y notas de crédito
 
-Series de numeración configurables, flujo del borrador con series elegibles y documento en una sola página (rama
-`feat/no-series`).
+Alta rápida de facturas y notas de crédito (rama `feat/alta-rapida-documentos`).
 
 Incluye:
 
-- Serie con tipo de documento y estado activo; líneas por fecha con prefijo, ancho, rango, incremento, número de aviso
-  y bloqueo; sin solapes entre series del mismo tipo. Motor de numeración por tipo y por serie, sin códigos fijos en
-  los consumidores (facturas, notas, borradores, cobros, asientos, socios, diarios) y con el orden de bloqueos de
-  siempre; el libro contable se serializa con su propio bloqueo.
-- API y páginas de series (`/series`) y de configuración por tipo (`/configuracion/numeracion`), con escrituras solo
-  para `CanAdministrar`. La serie asignada a un tipo no se borra ni se desactiva; la usada no se borra.
-- Borradores de factura y de nota con serie de borrador y de registro y próximo número; el posteo usa la serie de
-  registro, devuelve el aviso de numeración y deja el borrador en estado Posteada de solo lectura enlazado al
-  documento (un segundo posteo recibe 409). Copia de una factura posteada a un borrador nuevo.
-- Documento en una sola página para los borradores de factura y de nota y para los documentos posteados.
-- Migraciones `SeriesNumeracionConfigurables`, `BorradoresConSeriesYPosteada` y `BorradoresEnlaceUnico` probadas
-  desde vacío y desde el final de Fix-Features con datos, con Down y vuelta.
-- Suite xUnit ampliada a 1969 tests (0 avisos) y E2E del documento en una sola página (`09-documento-unico`).
+- Factura en una sola página (`/facturas-venta/nueva`): cliente con búsqueda y "Usar", datos derivados en solo lectura, numeración informativa y la primera línea; el documento se crea con esa línea en una transacción y queda "En preparación" (`/facturas-venta/en-preparacion/{id}`).
+- "Registrar factura" con confirmación (total, líneas, serie y próximo número), "Guardar para después" y "Descartar factura"; sin Liberar/Reabrir en la UI.
+- Nota de crédito desde la factura registrada con "Crear nota de crédito": todas las líneas pendientes y la devolución al inventario; se ajusta en `/notas-credito-venta/en-preparacion/{id}` y se registra con confirmación.
+- Series fijas por la configuración (la de registro solo la cambia el Administrador) y almacén fijo en el predeterminado; la API rechaza lo demás (`serie.no_editable`, `almacen.no_editable`).
+- Facturación con 2 entradas de menú y pestañas "Registradas" / "En preparación (n)"; las rutas antiguas de borradores redirigen.
+- Accesibilidad: datos en solo lectura en `<dl>`, resumen de errores con `role="alert"` enfocado tras la navegación mejorada, nombres accesibles en las acciones de fila.
+- Suite xUnit ampliada a 2114 tests (0 avisos) y E2E `10-alta-rapida`.
+
+### Versión 0.5 — Series de numeración y documento único
+
+Series de numeración configurables, flujo del borrador con series elegibles y documento en una sola página (rama `feat/no-series`).
+
+Incluye:
+
+- Serie con tipo de documento y estado activo; líneas por fecha con prefijo, ancho, rango, incremento, número de aviso y bloqueo; sin solapes entre series del mismo tipo. Motor de numeración por tipo y por serie, sin códigos fijos en los consumidores (facturas, notas, borradores, cobros, asientos, socios, diarios).
+- API y páginas de series (`/series`) y de configuración por tipo (`/configuracion/numeracion`), con escrituras solo para `CanAdministrar`. El borrado de una serie exige su versión (`DELETE api/series/{id}?xmin=`); la ficha y la lista explican por qué no se puede borrar o cambiar el tipo de una serie asignada o referenciada.
+- Borradores de factura y de nota con serie de borrador y de registro y próximo número; el posteo usa la serie de registro y deja el borrador en estado Posteada de solo lectura enlazado al documento. Copia de una factura posteada a un borrador nuevo.
+- Documento en una sola página para los borradores y para los documentos posteados (con la cuenta de IVA en los totales).
+- Los lotes de diario validan su serie bloqueada (`FOR SHARE`) en la misma transacción; pruebas de concurrencia real del posteo frente a la desactivación o el cambio de tipo de la serie.
+- Migración de datos `EnlazarBorradoresPosteadosHeredados`: los borradores posteados antes de esta versión quedan enlazados a su documento, con sus líneas.
+- Suite xUnit ampliada a 2004 tests (0 avisos) y E2E del documento en una sola página (`09-documento-unico`).
 
 ### Versión 0.4 — Fix-Features
 
@@ -489,17 +393,25 @@ Navegación, acciones por página, búsqueda global y entregable Parte 1 (rama `
 Incluye:
 
 - Registro único de módulos y grupos con visibilidad por permiso; menú lateral por grupos con el grupo actual abierto.
-- Inicio compacto con tarjetas de grupo y páginas `/modulos/{grupo}` con indicadores (los gráficos siguen en
-  `/dashboard/*`).
-- Búsqueda global de solo lectura en la API (Dapper) para clientes, productos y documentos; página `/buscar` y paleta
-  Ctrl+K con sugerencias desde el servidor; los metacaracteres se buscan literalmente.
-- Barra de acciones, selección de filas y página-tarjeta de alta y edición en todos los listados de mantenimiento,
-  con `returnUrl` validado contra redirecciones externas.
+- Inicio compacto con tarjetas de grupo y páginas `/modulos/{grupo}` con indicadores (los gráficos siguen en `/dashboard/*`).
+- Búsqueda global de solo lectura en la API (Dapper) para clientes, productos y documentos; página `/buscar` y paleta Ctrl+K.
+- Barra de acciones, selección de filas y página de alta y edición en todos los listados de mantenimiento, con `returnUrl` validado contra redirecciones externas.
 - Acciones contextuales de clientes, productos, facturas y notas de crédito; alta de cobro en `/cobros/nuevo`.
 - Navegación sin destello azul (barra de progreso con retardo de 150 ms).
-- Suite xUnit ampliada a 1684 tests (0 avisos) y suite E2E Playwright en `tests/e2e/` con capturas.
-- Documento técnico `.docx` sin portada, presentación `.pptx`, guion de demostración, diagramas y modelo ER generados
-  del esquema real, con generadores versionados en `tests/e2e/scripts/entregable/`.
+- Suite E2E Playwright en `tests/e2e/` con capturas; documento técnico `.docx`, presentación `.pptx`, guion, diagramas y modelo ER generados del esquema real.
+
+### Módulos ERP (Fases 0–8)
+
+Ampliación de AxionERP a un ERP comercial, desarrollada por fases en ramas `feat/erp-fase-*`.
+
+Incluye:
+
+- Núcleo: patrón `Result`/`Error`, Unit of Work, control de concurrencia con `xmin` y fechas de registro permitidas.
+- Maestros: socios de negocio (clientes), productos con unidades y categorías, almacenes, términos de pago y grupos contables.
+- Inventario: diarios de ajuste y transferencia con plantillas y lotes, existencias por almacén, libros de cantidad y de valor, costo unitario al día.
+- Contabilidad: plan de cuentas, setups contables, movimientos, balance de comprobación y posteo del costo de inventario.
+- Ventas: borradores y facturas de venta, cobros con aplicación a facturas, libro de clientes y estado de cuenta, notas de crédito con reverso de inventario y contabilidad.
+- Retiro de los módulos de demostración de entradas y configuraciones de aplicación.
 
 ### Versión 0.3 — Entregable 3
 
@@ -509,24 +421,14 @@ Incluye:
 
 - Integración completa de login, menú principal, frontend, API y PostgreSQL.
 - CRUD de usuarios exclusivo para el rol `Administrador`.
-- CRUD de clientes y productos conectado a base de datos.
-- Búsquedas y filtros dinámicos por múltiples campos.
+- CRUD de clientes y productos conectado a base de datos, con búsquedas y filtros por múltiples campos.
 - Validaciones de formularios y reglas de negocio en frontend y backend.
-- Políticas `CanConsult`, `CanAdd`, `CanModify` y `CanDelete`.
-- Acceso de consulta para `Administrador`, `Supervisor` y `Ejecutor`.
-- Alta de registros para `Administrador` y `Ejecutor`.
-- Modificación de registros para `Administrador` y `Supervisor`.
-- Eliminación restringida exclusivamente al `Administrador`.
-- Protección del módulo de usuarios para impedir acceso de `Supervisor` y `Ejecutor`.
-- Navegación y acciones visibles dinámicamente según rol.
-- Bloqueo efectivo de rutas y endpoints no autorizados.
+- Políticas `CanConsult`, `CanAdd`, `CanModify` y `CanDelete` y navegación según rol.
 - Dashboard general y dashboards de clientes y productos.
 - Reportes PDF y exportaciones a Excel.
 - Bitácora operativa para Administrador y Supervisor.
 - Modo oscuro y diseño responsivo.
-- Documento académico final en [`docs/ENTREGABLE-3.md`](docs/ENTREGABLE-3.md).
 - 47 capturas E2E con evidencia de módulos, formularios, confirmaciones y permisos.
-- Pruebas específicas para demostrar restricciones de Supervisor y Ejecutor tanto en UI como en API.
 
 #### Matriz de autorización validada
 
@@ -545,37 +447,21 @@ Primera versión del sistema, enfocada en la **Etapa I: Sistema de Login y Roles
 
 Incluye:
 
-- Proyecto cliente-servidor en .NET.
-- Backend ASP.NET Core Web API.
-- Frontend Blazor Web App Static SSR.
+- Proyecto cliente-servidor en .NET con arquitectura Onion.
+- Backend ASP.NET Core Web API y frontend Blazor Web App Static SSR.
 - Base de datos PostgreSQL.
-- Arquitectura organizada por capas usando Onion Architecture.
-- Autenticación de usuarios con ASP.NET Core Identity.
-- Inicio de sesión con usuario y contraseña.
-- Contraseñas ocultas en el formulario.
-- Validación de credenciales desde base de datos.
-- Control de acceso incorrecto y mensajes de error.
-- Roles iniciales: `Administrador`, `Supervisor` y `Ejecutor`.
-- Usuarios iniciales: `admin`, `supervisor` y `ejecutor`.
-- Permisos por rol para consultar, agregar, modificar y eliminar.
+- Autenticación con ASP.NET Core Identity; contraseñas ocultas y mensajes de error.
+- Roles iniciales `Administrador`, `Supervisor` y `Ejecutor` con usuarios `admin`, `supervisor` y `ejecutor`.
+- Permisos por rol para consultar, agregar, modificar y eliminar; bloqueo de acciones no autorizadas desde UI y API.
 - Menú principal con opciones según permisos.
-- Bloqueo de acciones no autorizadas desde UI y API.
-- CRUD funcional de entradas.
-- CRUD funcional de configuraciones.
 - Gestión de usuarios y roles.
-- Consultas y buscadores básicos.
-- Validaciones en formularios.
-- Navegación entre módulos.
-- Docker Compose para ejecutar API, Blazor y PostgreSQL.
-- Scripts y configuración para inicialización de base de datos.
+- Docker Compose para API, Blazor y PostgreSQL, con inicialización de la base de datos.
 - Workflows de validación y pruebas smoke.
 
 ## Notas de mantenimiento
 
-- Target framework: `net10.0`.
-- Solución: `test.slnx`.
-- Proyecto Blazor: `src/OpenSource1.Blazor/OpenSource1.Blazor.csproj`.
-- Proyecto API: `src/OpenSource1.Api/OpenSource1.Api.csproj`.
-- Los paquetes se gestionan con `PackageReference` directo en cada proyecto.
+- Target framework: `net10.0`; solución `test.slnx` (usar `dotnet build test.slnx` / `dotnet test test.slnx`).
+- Los paquetes se gestionan con `PackageReference` directo en cada proyecto (sin Central Package Management).
 - Nullable reference types e implicit usings están habilitados.
-- El frontend Blazor usa Static SSR; no agregar `@rendermode` ni handlers interactivos salvo que se migre explícitamente a modo interactivo.
+- El frontend Blazor usa Static SSR; no agregar `@rendermode` ni handlers interactivos salvo que se migre explícitamente a modo interactivo. Usar formularios GET/POST, `[SupplyParameterFromForm]`, `[SupplyParameterFromQuery]` y antiforgery.
+- Un nuevo mantenimiento sigue el patrón existente: controlador en la API, `Features/<Entidad>` en Application, repositorio Dapper en Infrastructure y página Static SSR registrada en `CatalogoModulos`.

@@ -1,0 +1,20 @@
+@* Aviso bloqueante (spec alta rápida, Parte 1.5): sin serie configurada o con la serie inactiva no se captura ni se registra. *@
+<div class="mb-6" data-testid="aviso-sin-serie">
+    <MessageBox Type="danger" Message="@Motivo" />
+    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+        @if (PuedeConfigurar)
+        {
+            <a class="font-semibold text-brand-600 hover:underline" href="/configuracion/numeracion">Configurar la numeración</a>
+        }
+        else
+        {
+            <span>Pida a un administrador que la configure.</span>
+        }
+    </p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Motivo { get; set; } = string.Empty;
+    /// <summary>CanAdministrar: enlace a /configuracion/numeracion.</summary>
+    [Parameter] public bool PuedeConfigurar { get; set; }
+}

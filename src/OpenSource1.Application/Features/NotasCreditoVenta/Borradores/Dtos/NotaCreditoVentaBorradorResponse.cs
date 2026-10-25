@@ -37,6 +37,9 @@ public sealed class NotaCreditoVentaBorradorResponse
     public string? Descripcion { get; init; }
     public int NumeroLineas { get; init; }
 
+    /// <summary>Total con ITBIS de las líneas guardadas (vista previa de las listas, sin los topes de lo ya acreditado).</summary>
+    public decimal ImporteTotal { get; init; }
+
     /// <summary>Abierta (editable) o Posteada (solo lectura, enlazada a <see cref="NotaCreditoVentaNumero"/>).</summary>
     public EstadoNotaCreditoBorrador Estado { get; init; }
 

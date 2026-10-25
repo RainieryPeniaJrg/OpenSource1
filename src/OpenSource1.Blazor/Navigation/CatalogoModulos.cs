@@ -18,7 +18,7 @@ public static class CatalogoModulos
         new("productos", "Productos", IconosModulo.Cubo, "Catálogo de productos, categorías y panel.", 2),
         new("inventario", "Inventario", IconosModulo.Tabla, "Existencias, almacenes, diarios y movimientos.", 3),
         new("ventas", "Ventas", IconosModulo.Tarjeta, "Cobros, libro de clientes y estado de cuenta.", 4),
-        new("facturacion", "Facturación", IconosModulo.Documento, "Borradores, facturas y notas de crédito.", 5),
+        new("facturacion", "Facturación", IconosModulo.Documento, "Facturas y notas de crédito, registradas y en preparación.", 5),
         new("contabilidad", "Contabilidad", IconosModulo.Libro, "Plan de cuentas, movimientos, balance y costo de inventario.", 6),
         new("reportes", "Reportes", IconosModulo.Grafico, "Reportería y bitácora de actividad.", 7),
         new("configuracion", "Configuración", IconosModulo.Ajustes, "Catálogos auxiliares y parámetros contables.", 8),
@@ -44,10 +44,10 @@ public static class CatalogoModulos
         new("movimientos-cliente", "ventas", "Movimientos de cliente", "Libro de clientes con importes pendientes.", "/ventas/movimientos-cliente", IconosModulo.Lista, Consultar, null, ["cxc", "cuentas por cobrar"]),
         new("estado-cuenta", "ventas", "Estado de cuenta (CxC)", "Saldos por cliente a una fecha de corte.", "/ventas/estado-cuenta", IconosModulo.Documento, Consultar, null, ["saldo", "cxc", "antiguedad"]),
 
-        new("borradores-factura", "facturacion", "Borradores de factura", "Facturas de venta en preparación.", "/facturas-venta/borradores", IconosModulo.Documento, Consultar, null, ["factura", "borrador", "venta"]),
-        new("facturas", "facturacion", "Facturas", "Facturas de venta posteadas.", "/facturas-venta", IconosModulo.Documento, Consultar, null, ["factura", "venta", "fv"]),
-        new("borradores-nota-credito", "facturacion", "Borradores de nota de crédito", "Notas de crédito en preparación.", "/notas-credito-venta/borradores", IconosModulo.Documento, Consultar, null, ["nota de credito", "devolucion"]),
-        new("notas-credito", "facturacion", "Notas de crédito", "Notas de crédito posteadas.", "/notas-credito-venta", IconosModulo.Documento, Consultar, null, ["nc", "devolucion"]),
+        new("facturas", "facturacion", "Facturas", "Facturas de venta registradas y en preparación.", "/facturas-venta", IconosModulo.Documento, Consultar, null,
+            ["factura", "venta", "fv", "borrador", "en preparación", "en preparacion"]),
+        new("notas-credito", "facturacion", "Notas de crédito", "Notas de crédito registradas y en preparación.", "/notas-credito-venta", IconosModulo.Documento, Consultar, null,
+            ["nc", "devolucion", "nota de credito", "borrador", "en preparación", "en preparacion"]),
 
         new("plan-cuentas", "contabilidad", "Plan de cuentas", "Catálogo de cuentas contables.", "/cuentas-contables", IconosModulo.Libro, Consultar, null, ["cuentas", "catalogo"]),
         new("movimientos-contables", "contabilidad", "Movimientos contables", "Libro de movimientos contables.", "/contabilidad/movimientos", IconosModulo.Lista, Consultar, null, ["asientos", "mayor", "diario"]),
@@ -70,13 +70,10 @@ public static class CatalogoModulos
     ];
 
     /// <summary>
-    /// Rutas que no cuelgan del listado de su módulo pero lo marcan en el menú (Puerta C): el alta de una factura o de una
-    /// nota de crédito crea un BORRADOR, así que marca los borradores y no el listado de documentos posteados (que por
-    /// prefijo ganaría). Se comparan como prefijo por segmentos, igual que <see cref="Modulo.Ruta"/>.
+    /// Rutas que no cuelgan del listado de su módulo pero lo marcan en el menú (Puerta C). Se comparan como prefijo por segmentos,
+    /// igual que <see cref="Modulo.Ruta"/>. Spec alta rápida: las altas y las páginas en preparación cuelgan de la ruta de su
+    /// documento (/facturas-venta/…, /notas-credito-venta/…) y el prefijo ya las marca; se conserva para futuras rutas que no
+    /// cuelguen de su listado.
     /// </summary>
-    public static IReadOnlyDictionary<string, string> RutasAsociadas { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["/facturas-venta/nueva"] = "borradores-factura",
-        ["/notas-credito-venta/nueva"] = "borradores-nota-credito",
-    };
+    public static IReadOnlyDictionary<string, string> RutasAsociadas { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }

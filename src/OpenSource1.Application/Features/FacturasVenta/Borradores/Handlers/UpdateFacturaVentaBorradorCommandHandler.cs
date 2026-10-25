@@ -4,6 +4,7 @@ using OpenSource1.Application.Data.UnitOfWork;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Commands;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Services.Contabilidad;
+using OpenSource1.Application.Services.Inventario;
 using OpenSource1.Core.Common;
 using OpenSource1.Core.Entities.Ventas;
 using OpenSource1.Core.Enums;
@@ -15,7 +16,8 @@ namespace OpenSource1.Application.Features.FacturasVenta.Borradores.Handlers;
 /// <c>FOR UPDATE</c> del borrador antes de leer, igual que las líneas: si cambia el grupo de IVA de negocio, el IVA congelado de
 /// las líneas se recalcula en la misma transacción (un setup inexistente para alguna línea -&gt; 400
 /// <c>Lineas[n].GrupoIvaProductoId</c> y no se guarda nada). Si cambia algún socio, los nuevos se bloquean <c>FOR SHARE</c>
-/// (después del borrador) antes de validarlos. Una serie de registro nueva se valida con
+/// (después del borrador) antes de validarlos. Solo el Administrador envía una serie de registro (si no, 400 <c>serie.no_editable</c>
+/// antes de abrir la transacción); una nueva se valida con
 /// <see cref="IGeneradorNumeroDocumento.ValidarSerieAsync"/> (tipo <c>FacturaVenta</c> y activa; error en <c>SerieRegistroId</c>).
 /// Un borrador <c>Posteada</c> es de solo lectura (409).
 /// </summary>
@@ -25,11 +27,17 @@ public sealed class UpdateFacturaVentaBorradorCommandHandler(
     IDerivadorCuentas derivador,
     IFacturaVentaBorradorReadRepository readRepository,
     IFacturaVentaBorradorDatos borradorDatos,
-    IGeneradorNumeroDocumento generadorNumero)
+    IGeneradorNumeroDocumento generadorNumero,
+    IUsuarioActual usuario)
     : IRequestHandler<UpdateFacturaVentaBorradorCommand, Result<FacturaVentaBorradorResponse>>
 {
     public async Task<Result<FacturaVentaBorradorResponse>> Handle(UpdateFacturaVentaBorradorCommand request, CancellationToken cancellationToken)
     {
+        if (NumeracionBorrador.ValidarSeriesSolicitadas(null, request.SerieRegistroId, usuario.EsAdministrador) is { } noEditable)
+        {
+            return Result<FacturaVentaBorradorResponse>.Fallo(noEditable);
+        }
+
         await using var transaccion = await unitOfWork.BeginTransactionAsync(cancellationToken);
 
         var estado = await bloqueo.BloquearYObtenerEstadoAsync(request.Id, cancellationToken);
@@ -92,12 +100,18 @@ public sealed class UpdateFacturaVentaBorradorCommandHandler(
             return Result<FacturaVentaBorradorResponse>.Fallo(errorFecha);
         }
 
+        // Almacén (spec alta rápida): null o el actual = conservar; el predeterminado se acepta; cualquier otro -> 400.
         if (request.AlmacenId is { } almacenSolicitado && almacenSolicitado != entity.AlmacenId)
         {
-            var almacen = await FacturaVentaBorradorReglas.ResolverAlmacenAsync(unitOfWork, almacenSolicitado, cancellationToken);
-            if (!almacen.TryObtenerValor(out var almacenId))
+            var predeterminado = await FacturaVentaBorradorReglas.ResolverAlmacenAsync(unitOfWork, null, cancellationToken);
+            if (!predeterminado.TryObtenerValor(out var almacenId))
             {
-                return Result<FacturaVentaBorradorResponse>.Fallo(almacen);
+                return Result<FacturaVentaBorradorResponse>.Fallo(predeterminado);
+            }
+
+            if (almacenSolicitado != almacenId)
+            {
+                return Result<FacturaVentaBorradorResponse>.Fallo(FacturaVentaBorradorErrores.AlmacenNoEditable());
             }
 
             entity.AlmacenId = almacenId;

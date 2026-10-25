@@ -78,7 +78,7 @@ internal sealed class FechasRegistroPrueba(LibroInventarioPrueba prueba)
     public static IValidadorFechaRegistro Validador(IServiceProvider proveedor, Guid? usuarioId) =>
         ActivatorUtilities.CreateInstance<ValidadorFechaRegistro>(proveedor, (IUsuarioActual)new Usuario(usuarioId));
 
-    public sealed record Usuario(Guid? Id) : IUsuarioActual
+    public sealed record Usuario(Guid? Id, bool EsAdministrador = false) : IUsuarioActual
     {
         public string Nombre => Id is null ? "system" : $"usuario-{Id:N}"[..20];
     }
