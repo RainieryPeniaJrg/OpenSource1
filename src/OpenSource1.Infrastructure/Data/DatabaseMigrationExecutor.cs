@@ -17,6 +17,14 @@ public static class DatabaseMigrationExecutor
         {
             await database.MigrateAsync(cancellationToken);
         }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InvalidPassword)
+        {
+            throw new InvalidOperationException(
+                "PostgreSQL rejected the password of the connection string (28P01). With docker compose, POSTGRES_PASSWORD is only " +
+                "applied when the postgres-data volume is created for the first time: put back in .env the value used then, or " +
+                "recreate the volume with 'docker compose down -v' (this deletes all the data).",
+                ex);
+        }
         catch (PostgresException ex) when (ex.SqlState == "42P04")
         {
             logger.LogWarning(ex, "PostgreSQL database already exists. Retrying migrations.");

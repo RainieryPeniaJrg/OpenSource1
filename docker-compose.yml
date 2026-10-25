@@ -50,6 +50,7 @@ services:
       Database__ApplyMigrationsOnStartup: "true"
       UserSeed__Enabled: "true"
       UserSeed__DefaultPassword: "${AUTH_SEED_DEFAULT_PASSWORD:?Set AUTH_SEED_DEFAULT_PASSWORD in a local .env file}"
+      UserSeed__ResetPasswords: "${AUTH_SEED_RESET_PASSWORDS:-false}"
     ports:
       - "8081:8080"
     volumes:

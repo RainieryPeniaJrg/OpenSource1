@@ -178,16 +178,14 @@ Variables:
 
 | Variable | Uso |
 | --- | --- |
-| `POSTGRES_PASSWORD` | Contraseña del usuario de PostgreSQL (requerida). |
+| `POSTGRES_PASSWORD` | Contraseña del usuario de PostgreSQL (requerida). Solo se aplica al crear el volumen `postgres-data`. |
 | `JWT_SIGNING_KEY` | Clave de firma del JWT, mínimo 32 caracteres aleatorios (requerida). |
-| `AUTH_SEED_DEFAULT_PASSWORD` | Contraseña de los usuarios iniciales (requerida). |
-| `POSTGRES_PORT` | Puerto del host para PostgreSQL (opcional, por defecto `5432`; cámbielo si ese puerto ya está ocupado). |
+| `AUTH_SEED_DEFAULT_PASSWORD` | Contraseña para iniciar sesión con los usuarios iniciales (requerida; 8+ caracteres con mayúscula, minúscula y dígito). |
+| `AUTH_SEED_RESET_PASSWORDS` | `true` para que la API vuelva a poner `AUTH_SEED_DEFAULT_PASSWORD` a los usuarios iniciales al arrancar (por defecto `false`). |
+| `POSTGRES_PORT` | Puerto del host para PostgreSQL (por defecto `5432`). |
 
-Una clave JWT aleatoria se puede generar con:
-
-```bash
-openssl rand -base64 48
-```
+Defina los valores **antes** del primer `docker compose up`: las dos contraseñas se graban en la base de datos la primera
+vez.
 
 No subir el archivo `.env` real al repositorio (está en `.gitignore`).
 
@@ -212,16 +210,14 @@ User Secrets tiene prioridad sobre `appsettings.json` en `Development`. `appsett
 
 ## Ejecución con Docker Compose
 
-Requisitos: Docker con Compose v2 y el archivo `.env` configurado.
-
-Construir las imágenes desde el código y levantar el sistema:
+Levantar el sistema construyendo las imágenes desde el código del repositorio:
 
 ```bash
-docker compose build
-docker compose up -d
+docker compose up -d --build
 ```
 
-La API aplica las migraciones al iniciar (`Database__ApplyMigrationsOnStartup=true`) y crea los usuarios iniciales; el primer arranque tarda unos segundos más.
+Sin `--build`, en una máquina nueva Compose descarga las imágenes publicadas en Docker Hub, que pueden no corresponder al
+código que tiene en el clon.
 
 Servicios disponibles:
 
@@ -298,7 +294,9 @@ dotnet test test.slnx
 Una prueba concreta o un grupo:
 
 ```bash
-dotnet test tests/OpenSource1.SmokeTests --filter "FullyQualifiedName~Series"
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userNameOrEmail":"admin","password":"<AUTH_SEED_DEFAULT_PASSWORD>"}'
 ```
 
 Pruebas E2E con Playwright, contra el stack levantado en `http://localhost:8080`:
@@ -312,7 +310,18 @@ bash scripts/con-credenciales.sh npx playwright test
 
 `con-credenciales.sh` toma `E2E_PASSWORD` de `AUTH_SEED_DEFAULT_PASSWORD` en el `.env` sin escribirla en ningún archivo; también se puede exportar `E2E_PASSWORD` a mano.
 
-Variables opcionales: `E2E_BASE_URL`, `E2E_ADMIN_USER`, `E2E_SUPERVISOR_USER`, `E2E_EJECUTOR_USER`, `E2E_TRACE=1`. El reporte HTML se guarda en `docs/entregable-parte-1/evidencias/reporte-e2e/`.
+## Problemas al levantar el proyecto
+
+| Síntoma | Causa | Solución |
+| --- | --- | --- |
+| El login responde "credenciales inválidas" con la contraseña de `.env` | Los usuarios iniciales ya existían con otra contraseña (se cambió `AUTH_SEED_DEFAULT_PASSWORD` después del primer arranque). El log de la API lo indica con "already exists with a password different". | Poner `AUTH_SEED_RESET_PASSWORDS=true` en `.env` y ejecutar `docker compose up -d api`; después volver a `false`. |
+| El login dice "Cuenta bloqueada temporalmente por múltiples intentos fallidos" | Tres intentos fallidos bloquean la cuenta 5 minutos (también con la contraseña correcta). | Esperar 5 minutos, o poner `AUTH_SEED_RESET_PASSWORDS=true` y ejecutar `docker compose up -d api`, que también desbloquea los usuarios iniciales. |
+| La API se detiene con "PostgreSQL rejected the password … (28P01)" | Se cambió `POSTGRES_PASSWORD` después de crear el volumen `postgres-data`; PostgreSQL conserva la contraseña original. | Volver a poner en `.env` la contraseña original, o recrear el volumen con `docker compose down -v` (borra todos los datos) y `docker compose up -d --build`. |
+| "Set POSTGRES_PASSWORD in a local .env file" | Falta el archivo `.env`. | `cp .env.example .env` y ajustar los valores. |
+
+Ver el log de la API: `docker compose logs api`.
+
+## Docker Hub
 
 Comprobación rápida del login desde la API:
 
