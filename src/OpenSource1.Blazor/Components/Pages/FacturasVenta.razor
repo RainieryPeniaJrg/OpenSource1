@@ -32,6 +32,7 @@
     <PageToolbar Titulo="Facturas" Subtitulo="Facturas de venta posteadas (documento legal, sin modificación)."
                  Migas="@MigasListado" Permisos="@permisos"
                  NuevoHref="@RetornoLocal.ConRetorno("/facturas-venta/nueva", UrlActual)" NuevoTexto="Nueva factura"
+                 NuevoPermiso="@ApplicationPolicies.CanCapturarFactura"
                  SeleccionId="@FacturaSeleccionada?.Numero"
                  Crear="@CrearFactura" Ver="@VerFactura" RetornoUrl="@UrlActual">
         <a href="/facturas-venta/borradores" class="btn-press rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Borradores</a>
@@ -364,6 +365,7 @@ else
     private string messageType = "info";
     private IReadOnlyList<string> errores = [];
     private bool canAdd;
+    private bool canCaptureInvoice;
     private PermisosPagina? permisos;
     private SocioNegocioResponse? socioFiltro;
     private IReadOnlyList<NotaCreditoVentaResponse> notasFactura = [];
@@ -397,7 +399,8 @@ else
     /// </summary>
     private IReadOnlyList<AccionPagina> CrearDetalle =>
     [
-        new("Copiar a borrador", IconosModulo.Documento, id => $"/facturas-venta/{Uri.EscapeDataString(id!)}?copiar=true", ApplicationPolicies.CanAdd, RequiereSeleccion: true),
+        // Legacy: new("Copiar a borrador", IconosModulo.Documento, id => $"/facturas-venta/{Uri.EscapeDataString(id!)}?copiar=true", ApplicationPolicies.CanAdd, RequiereSeleccion: true),
+        new("Copiar a borrador", IconosModulo.Documento, id => $"/facturas-venta/{Uri.EscapeDataString(id!)}?copiar=true", ApplicationPolicies.CanCapturarFactura, RequiereSeleccion: true),
         .. TienePendiente ? CrearFactura : [],
     ];
 
@@ -468,7 +471,8 @@ else
     private bool MuestraFormCrearNota => detalle is not null && canAdd && CrearNota;
 
     /// <summary>Diálogo de Copiar a borrador: con ?copiar=true y CanAdd, mientras no se haya hecho ya la copia (con avisos).</summary>
-    private bool MuestraDialogoCopiar => detalle is not null && canAdd && CopiarConfirm && copia is null;
+    // Legacy: private bool MuestraDialogoCopiar => detalle is not null && canAdd && CopiarConfirm && copia is null;
+    private bool MuestraDialogoCopiar => detalle is not null && canCaptureInvoice && CopiarConfirm && copia is null;
 
     /// <summary>Queda algo por acreditar en alguna línea (si las notas no cargaron, se asume que sí: la API valida).</summary>
     private bool TienePendiente => detalle is not null && (notasCargaFallida || detalle.Lineas
@@ -484,6 +488,7 @@ else
         CopiarInput ??= new();
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
         canAdd = permisos.CanAdd;
+        canCaptureInvoice = await permisos.PuedeAsync(ApplicationPolicies.CanCapturarFactura);
     }
 
     protected override async Task OnParametersSetAsync()
@@ -535,6 +540,7 @@ else
     {
         try
         {
+            /* Legacy implementation retained: one page and one detail call per note.
             var paginaNotas = await NotaApiClient.ListNotasAsync(
                 new NotaCreditoVentaSearchCriteria(FacturaVentaNumero: numeroFactura), new PageRequest(1, PageRequest.TamanoMaximo, "Numero", Descendente: false));
             notasFactura = paginaNotas.Items.Where(n => n.FacturaVentaNumero == numeroFactura).ToList();
@@ -555,6 +561,13 @@ else
             var paginaBorradores = await NotaApiClient.ListBorradoresAsync(
                 new NotaCreditoVentaBorradorFiltro(null, numeroFactura, null, null), new PageRequest(1, PageRequest.TamanoMaximo, "CreatedAtUtc", Descendente: false));
             borradoresNota = paginaBorradores.Items.Where(b => b.FacturaVentaNumero == numeroFactura).ToList();
+            */
+            var resumen = await FacturaApiClient.GetNotasFacturaAsync(numeroFactura)
+                ?? throw new InvalidOperationException("La factura ya no existe al leer sus notas de crédito.");
+            notasFactura = resumen.Notas;
+            borradoresNota = resumen.Borradores;
+            acreditadoPorLinea = resumen.Lineas.ToDictionary(
+                l => l.LineaFacturaVentaId, l => (l.Cantidad, l.Importe, l.Devuelto));
         }
         catch (Exception ex)
         {

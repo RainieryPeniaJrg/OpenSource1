@@ -97,6 +97,83 @@ public sealed class CobrosTests(PostgresTestFixture fixture) : IClassFixture<Pos
 
     // ----- Task 8.5: fechas de registro permitidas (Review Focus 4 de la Fase 8) -----
 
+    [Theory]
+    [InlineData(9)]
+    [InlineData(11)]
+    public async Task AplicarAntesDeFacturaOPago_RechazaSinCambiarLibros(int dia)
+    {
+        var socio = await SocioAsync();
+        var factura = await FacturaPosteadaAsync(socio, 100m);
+        var pago = await PagarOkAsync(new RegistrarPagoClienteCommand(socio, 50m, D12));
+        var antes = await FotoAsync();
+
+        var resultado = await AplicarAsync(new AplicarPagoCommand(factura, pago.MovimientoClienteId, 50m, new(2026, 9, dia)));
+
+        Assert.Equal(("cobro.fecha_anterior_documentos", "FechaRegistro"), Unico(resultado));
+        Assert.Equal(antes, await FotoAsync());
+        Assert.Equal(118m, await RestanteAsync(factura));
+        Assert.Equal(-50m, await RestanteAsync(pago.MovimientoClienteId));
+    }
+
+    [Fact]
+    public async Task AplicarConCambioDeGrupo_ReclasificaSoloImporteAplicadoEntreCuentasCongeladas()
+    {
+        var socio = await SocioAsync();
+        var factura = await FacturaPosteadaAsync(socio, 100m);
+        var cuentaFactura = await EscalarAsync<Guid>("""SELECT "CuentaCxCId" FROM "MovimientosCliente" WHERE "Id" = @Id""", new { Id = factura });
+        var cuentaPago = await CuentaAsync(false);
+        var grupo = await GrupoClienteAsync(cuentaPago);
+        await EjecutarSqlAsync("""UPDATE "SociosNegocio" SET "GrupoClienteContableId" = @Grupo WHERE "Id" = @Id""", new { Grupo = grupo, Id = socio });
+        var pago = await PagarOkAsync(new RegistrarPagoClienteCommand(socio, 50m, D12));
+
+        Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago.MovimientoClienteId, 30m, D15)));
+
+        Assert.Equal(88m, await RestanteAsync(factura));
+        Assert.Equal(-20m, await RestanteAsync(pago.MovimientoClienteId));
+        Assert.Equal(-30m, await EscalarAsync<decimal>("""SELECT SUM("Importe") FROM "MovimientosContables" WHERE "SocioNegocioId" = @Socio AND "FechaRegistro" = @Fecha AND "CuentaContableId" = @Cuenta""", new { Socio = socio, Fecha = D15, Cuenta = cuentaFactura }));
+        Assert.Equal(30m, await EscalarAsync<decimal>("""SELECT SUM("Importe") FROM "MovimientosContables" WHERE "SocioNegocioId" = @Socio AND "FechaRegistro" = @Fecha AND "CuentaContableId" = @Cuenta""", new { Socio = socio, Fecha = D15, Cuenta = cuentaPago }));
+        Assert.Equal(0m, await EscalarAsync<decimal>("""SELECT SUM("Importe") FROM "MovimientosContables" WHERE "SocioNegocioId" = @Socio AND "FechaRegistro" = @Fecha""", new { Socio = socio, Fecha = D15 }));
+
+        // A second partial application of the same pair adds only its own reclassification.
+        Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago.MovimientoClienteId, 20m, D15)));
+        Assert.Equal(68m, await RestanteAsync(factura));
+        Assert.Equal(0m, await RestanteAsync(pago.MovimientoClienteId));
+        Assert.Equal(-50m, await EscalarAsync<decimal>("""SELECT SUM("Importe") FROM "MovimientosContables" WHERE "SocioNegocioId" = @Socio AND "FechaRegistro" = @Fecha AND "CuentaContableId" = @Cuenta""", new { Socio = socio, Fecha = D15, Cuenta = cuentaFactura }));
+        Assert.Equal(50m, await EscalarAsync<decimal>("""SELECT SUM("Importe") FROM "MovimientosContables" WHERE "SocioNegocioId" = @Socio AND "FechaRegistro" = @Fecha AND "CuentaContableId" = @Cuenta""", new { Socio = socio, Fecha = D15, Cuenta = cuentaPago }));
+    }
+
+    [Fact]
+    public async Task AplicarEnFechaDelPago_AdmiteLimiteDeFechaInclusivo()
+    {
+        var socio = await SocioAsync();
+        var factura = await FacturaPosteadaAsync(socio, 100m);
+        var pago = await PagarOkAsync(new RegistrarPagoClienteCommand(socio, 50m, D12));
+
+        var resultado = Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago.MovimientoClienteId, 50m, D12)));
+
+        Assert.Equal((68m, 0m), (resultado.RestanteFactura, resultado.RestantePago));
+    }
+
+    [Fact]
+    public async Task ReclasificacionConCuentaBloqueada_RevierteAplicacionCompleta()
+    {
+        var socio = await SocioAsync();
+        var factura = await FacturaPosteadaAsync(socio, 100m);
+        var cuentaPago = await CuentaAsync(false);
+        var grupo = await GrupoClienteAsync(cuentaPago);
+        await EjecutarSqlAsync("""UPDATE "SociosNegocio" SET "GrupoClienteContableId" = @Grupo WHERE "Id" = @Id""", new { Grupo = grupo, Id = socio });
+        var pago = await PagarOkAsync(new RegistrarPagoClienteCommand(socio, 50m, D12));
+        await EjecutarSqlAsync("""UPDATE "CuentasContables" SET "Bloqueada" = true WHERE "Id" = @Id""", new { Id = cuentaPago });
+        var antes = await FotoAsync();
+
+        var resultado = await AplicarAsync(new AplicarPagoCommand(factura, pago.MovimientoClienteId, 30m, D15));
+
+        Assert.True(resultado.EsFallo);
+        Assert.Equal(antes, await FotoAsync());
+        Assert.Equal(118m, await RestanteAsync(factura));
+        Assert.Equal(-50m, await RestanteAsync(pago.MovimientoClienteId));
+    }
+
     [Fact]
     public async Task ReviewFocus4_Pago_FechaFueraDelRangoPermitido_400EnFechaRegistro_SinEscribir_YExcepcionesDeUsuario()
     {
@@ -176,14 +253,18 @@ public sealed class CobrosTests(PostgresTestFixture fixture) : IClassFixture<Pos
             Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m, D15), amplio));
             Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m), amplio));
 
-            // Excepción más estrecha: el 12/09 le falla al usuario; su día 11/09 no.
-            await fechas.UsuarioAsync(estrecho, new DateOnly(2026, 9, 11), new DateOnly(2026, 9, 11));
+            // Original: range 11/09-11/09 accepted an application before the payment dated 12/09.
+            // The user's narrow range still applies, subject to the document chronology invariant.
+            // await fechas.UsuarioAsync(estrecho, new DateOnly(2026, 9, 11), new DateOnly(2026, 9, 11));
+            await fechas.UsuarioAsync(estrecho, D12, D12);
             antes = await FotoAsync();
-            var falloEstrecho = await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m, D12), estrecho);
+            // Original: var falloEstrecho = await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m, D12), estrecho);
+            var falloEstrecho = await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m, D15), estrecho);
             Assert.Equal(("registro.fecha_no_permitida", "FechaRegistro"), Unico(falloEstrecho));
             Assert.Contains("usuario", falloEstrecho.Errores[0].Mensaje);
             Assert.Equal(antes, await FotoAsync());
-            Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m, new DateOnly(2026, 9, 11)), estrecho));
+            // Original: Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m, new DateOnly(2026, 9, 11)), estrecho));
+            Ok(await AplicarAsync(new AplicarPagoCommand(factura, pago, 1m, D12), estrecho));
 
             Assert.Equal(118m - 5m, await RestanteAsync(factura));
         }

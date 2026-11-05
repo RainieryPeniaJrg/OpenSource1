@@ -121,9 +121,10 @@ public sealed class RegistroMovimientosCliente(IDbSession session, IUsuarioActua
         var tx = session.CurrentTransaction;
 
         // 1) Bloqueo, en orden de Id: dos aplicaciones sobre movimientos comunes se serializan sin interbloquearse.
+        // Original projection: SELECT "Id", "SocioNegocioId", "TipoDocumento", "NumeroDocumento"
         var filas = (await session.Connection.QueryAsync<MovimientoFila>(new CommandDefinition(
             """
-            SELECT "Id", "SocioNegocioId", "TipoDocumento", "NumeroDocumento"
+            SELECT "Id", "SocioNegocioId", "TipoDocumento", "NumeroDocumento", "FechaRegistro", "CuentaCxCId"
             FROM "MovimientosCliente"
             WHERE "Id" = ANY(@Ids)
             ORDER BY "Id"
@@ -147,8 +148,12 @@ public sealed class RegistroMovimientosCliente(IDbSession session, IUsuarioActua
             """,
             new { Ids = filas.Select(f => f.Id).ToArray() }, tx, cancellationToken: ct))).ToDictionary(r => r.Id, r => r.Restante);
 
+        // Original:
+        // return [.. filas.Select(f => new MovimientoClienteBloqueado(
+        //     f.Id, f.SocioNegocioId, (TipoDocumentoCliente)f.TipoDocumento, f.NumeroDocumento, restantes.GetValueOrDefault(f.Id)))];
         return [.. filas.Select(f => new MovimientoClienteBloqueado(
-            f.Id, f.SocioNegocioId, (TipoDocumentoCliente)f.TipoDocumento, f.NumeroDocumento, restantes.GetValueOrDefault(f.Id)))];
+            f.Id, f.SocioNegocioId, (TipoDocumentoCliente)f.TipoDocumento, f.NumeroDocumento, restantes.GetValueOrDefault(f.Id),
+            f.FechaRegistro, f.CuentaCxCId))];
     }
 
     public async Task<Result<AplicacionClienteRegistrada>> AplicarAsync(AplicacionClienteSolicitud solicitud, CancellationToken ct = default)
@@ -192,6 +197,13 @@ public sealed class RegistroMovimientosCliente(IDbSession session, IUsuarioActua
                 $"El pago {pago.NumeroDocumento} y el documento {factura.NumeroDocumento} son de clientes distintos: solo se aplica entre " +
                 "movimientos del mismo cliente.",
                 "MovimientoPagoId"));
+        }
+
+        if (solicitud.FechaRegistro < factura.FechaRegistro || solicitud.FechaRegistro < pago.FechaRegistro)
+        {
+            return Result<AplicacionClienteRegistrada>.Fallo(new Error(
+                "cobro.fecha_anterior_documentos",
+                "La fecha de aplicación no puede ser anterior a la factura ni al pago.", "FechaRegistro"));
         }
 
         if (factura.ImporteRestante <= 0m)
@@ -360,5 +372,7 @@ public sealed class RegistroMovimientosCliente(IDbSession session, IUsuarioActua
         public Guid SocioNegocioId { get; init; }
         public short TipoDocumento { get; init; }
         public string NumeroDocumento { get; init; } = string.Empty;
+        public DateOnly FechaRegistro { get; init; }
+        public Guid CuentaCxCId { get; init; }
     }
 }

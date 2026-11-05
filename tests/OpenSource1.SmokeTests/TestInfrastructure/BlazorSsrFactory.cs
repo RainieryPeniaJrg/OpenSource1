@@ -61,7 +61,9 @@ public sealed class BlazorSsrFactory : WebApplicationFactory<BlazorApp::Program>
     public HttpClient Cliente(string roles = "Administrador", string? permisos = null, bool anonimo = false)
     {
         _iniciado = true;
-        var cliente = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        // Part 1: var cliente = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        // Testing uses the production cookie policy; use a secure virtual TestServer request.
+        var cliente = CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, BaseAddress = new Uri("https://localhost") });
         if (anonimo)
         {
             cliente.DefaultRequestHeaders.Add(PermisosTestAuthHandler.CabeceraAnonimo, "true");

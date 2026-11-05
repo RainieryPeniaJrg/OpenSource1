@@ -4,6 +4,7 @@ using BlazorApp::OpenSource1.Blazor.Services;
 using Moq;
 using OpenSource1.Application.Features.Almacenes.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
+using OpenSource1.Application.Features.FacturasVenta.Notas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
 using OpenSource1.Application.Features.MovimientosCliente.Dtos;
@@ -67,7 +68,10 @@ public sealed class AccionesFacturasTests
             {
                 await Task.Yield();
                 return new FacturaVentaDetalleResponse(
-                    new FacturaVentaResponse { Numero = "FV0001", SocioNegocioId = IdCliente, NombreFacturacion = "Comercial Uno" }, [], []);
+                    // Part 1 fixture used an empty invoice and relied on a failed notes lookup to show Create.
+                    // new FacturaVentaResponse { Numero = "FV0001", SocioNegocioId = IdCliente, NombreFacturacion = "Comercial Uno" }, [], []);
+                    new FacturaVentaResponse { Numero = "FV0001", SocioNegocioId = IdCliente, NombreFacturacion = "Comercial Uno", ImporteTotal = 100m },
+                    [new LineaFacturaVentaResponse { Id = 1, NumeroLinea = 1, Tipo = TipoLineaFactura.CuentaContable, Cantidad = 1, PrecioUnitario = 100m, ImporteLinea = 100m, Descripcion = "Venta" }], []);
             });
 
         var html = await HtmlSsr.HtmlAsync(app.Cliente(), "/facturas-venta/FV0001");
@@ -358,6 +362,8 @@ public sealed class AccionesFacturasTests
             .ReturnsAsync(new TerminoPagoResponse { Id = terminoId, Codigo = "CONTADO", Descripcion = "Contado" });
 
         var facturas = app.Simular<IFacturaVentaApiClient>();
+        facturas.Setup(c => c.GetNotasFacturaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotasFacturaResponse([], [], []));
         facturas.Setup(c => c.ListFacturasAsync(It.IsAny<FacturaVentaSearchCriteria?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {

@@ -27,8 +27,7 @@ public sealed class PermisosTestAuthHandler(
     public const string SinPermisos = "-";
 
     /// <summary>
-    /// Solo las 5 políticas coarse de la tabla de <c>AuthService.GetPermissions</c>, con nombres de rol exactos (sensibles a
-    /// mayúsculas). No incluye los permisos finos de <c>PermisosPorRol.ParaRol</c> ni la comparación sin mayúsculas de producción.
+    /// Políticas coarse y permisos finos de cada rol, como el JWT/cookie emitido por producción.
     /// </summary>
     public static string PermisosDeRol(string roles)
     {
@@ -46,7 +45,11 @@ public sealed class PermisosTestAuthHandler(
                 case ApplicationRoles.Executor:
                     permisos.UnionWith([ApplicationPolicies.CanAdd, ApplicationPolicies.CanConsult]);
                     break;
+                case ApplicationRoles.Salesperson:
+                    permisos.Add(ApplicationPolicies.CanConsult);
+                    break;
             }
+            permisos.UnionWith(PermisosPorRol.ParaRol(rol));
         }
 
         return string.Join(',', permisos.Order(StringComparer.Ordinal));

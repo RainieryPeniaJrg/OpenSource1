@@ -12,7 +12,8 @@ export default defineConfig({
   // El caso @api-caida se ejecuta aparte (API detenida): E2E_REPORTE=reporte-e2e-api-caida para no pisar el reporte principal.
   reporter: [
     ['list'],
-    ['html', { outputFolder: `../../docs/entregable-parte-1/evidencias/${process.env.E2E_REPORTE ?? 'reporte-e2e'}`, open: 'never' }],
+    // Part 1: ['html', { outputFolder: `../../docs/entregable-parte-1/evidencias/${process.env.E2E_REPORTE ?? 'reporte-e2e'}`, open: 'never' }],
+    ['html', { outputFolder: process.env.E2E_REPORT_DIR ?? `../../docs/entregable-parte-1/evidencias/${process.env.E2E_REPORTE ?? 'reporte-e2e'}`, open: 'never' }],
   ],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8080',

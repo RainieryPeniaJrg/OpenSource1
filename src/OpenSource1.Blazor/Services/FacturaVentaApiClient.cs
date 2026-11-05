@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Calculo;
 using OpenSource1.Application.Features.FacturasVenta.Copia;
+using OpenSource1.Application.Features.FacturasVenta.Notas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Posteo;
@@ -15,6 +16,10 @@ public sealed class FacturaVentaApiClient(HttpClient httpClient, ILogger<Factura
     private const string BaseRoute = "api/facturas-venta";
     private const string BorradorNoEncontrado = "No se encontró el borrador de factura indicado (puede haber sido posteado o eliminado).";
     private const string LineaNoEncontrada = "No se encontró la línea de factura indicada.";
+
+    public Task<NotasFacturaResponse?> GetNotasFacturaAsync(string numero, CancellationToken cancellationToken = default) =>
+        VentaApiRespuestas.GetOrNullAsync<NotasFacturaResponse>(
+            httpClient, $"{BaseRoute}/{Uri.EscapeDataString(numero)}/notas-credito", "las notas de crédito de la factura", logger, cancellationToken);
 
     public async Task<PagedResult<FacturaVentaBorradorResponse>> ListBorradoresAsync(
         FacturaVentaBorradorFiltro? filtro = null, PageRequest? paginacion = null, CancellationToken cancellationToken = default)

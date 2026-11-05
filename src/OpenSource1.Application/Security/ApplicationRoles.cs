@@ -5,6 +5,8 @@ public static class ApplicationRoles
     public const string Administrator = "Administrador";
     public const string Supervisor = "Supervisor";
     public const string Executor = "Ejecutor";
+    public const string Salesperson = "Vendedor";
 
-    public static readonly string[] All = [Administrator, Supervisor, Executor];
+    // Legacy: public static readonly string[] All = [Administrator, Supervisor, Executor];
+    public static readonly string[] All = [Administrator, Supervisor, Executor, Salesperson];
 }

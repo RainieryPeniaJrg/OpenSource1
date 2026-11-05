@@ -33,6 +33,26 @@ public sealed class FacturasVentaPosteoApiTests : IClassFixture<PostgresTestFixt
     }
 
     [Fact]
+    public async Task Vendedor_CapturaYPosteaVenta_SinAdministrarUsuariosNiBorrar()
+    {
+        var socio = await CrearSocioAsync(Admin(), "Cliente vendedor");
+        var cuenta = await CrearCuentaAsync(Admin());
+        var vendedor = Rol("Vendedor");
+        var borrador = await CrearBorradorAsync(vendedor, socio);
+        await CrearLineaCuentaAsync(vendedor, borrador.Id, cuenta, 100m);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await vendedor.GetAsync("/api/users")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await vendedor.DeleteAsync($"{Base}/borradores/{borrador.Id}")).StatusCode);
+
+        var respuesta = await vendedor.PostAsync($"{Base}/borradores/{borrador.Id}/postear", null);
+        Assert.True(respuesta.StatusCode == HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync());
+        var json = JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(118m, json.GetProperty("importeTotal").GetDecimal());
+        var saldo = JsonDocument.Parse(await vendedor.GetStringAsync($"/api/clientes/{socio}/saldo")).RootElement;
+        Assert.Equal(118m, saldo.GetProperty("saldo").GetDecimal());
+    }
+
+    [Fact]
     public async Task Postear_CanModify_200ConNumeroTotalYRegistro_LaFacturaSeConsulta_Y409AlRepetir()
     {
         var client = Admin();

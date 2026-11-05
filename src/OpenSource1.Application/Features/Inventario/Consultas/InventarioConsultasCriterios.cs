@@ -33,7 +33,8 @@ public sealed record MovimientoValorVistaCriterios(
 /// <summary>
 /// Filtros de <c>GET api/inventario/existencias</c>: almacén, producto (por id o por <see cref="Texto"/> sobre código y nombre),
 /// fecha de corte (<see cref="Fecha"/>, incluida; el handler la fija a hoy si falta) y <see cref="SoloConExistencia"/>
-/// (<c>true</c> = solo filas con existencia distinta de cero).
+/// Original: (<c>true</c> = solo filas con existencia distinta de cero).
+/// (<c>true</c> = filas con cantidad o valor distinto de cero, para no ocultar valor residual sin existencia física).
 /// </summary>
 public sealed record ExistenciaVistaCriterios(
     Guid? AlmacenId = null,

@@ -197,7 +197,9 @@ public sealed class DapperInventarioConsultasRepository(IDbSession session) : II
             parameters.Add("Texto", $"%{FilterExpressionBuilder.EscaparMetacaracteresLike(criterios.Texto.Trim())}%");
         }
 
-        var exterior = criterios.SoloConExistencia ? "WHERE \"Existencia\" <> 0" : string.Empty;
+        // Original: var exterior = criterios.SoloConExistencia ? "WHERE \"Existencia\" <> 0" : string.Empty;
+        // A zero physical balance can still carry a residual valuation that reconciliation must display.
+        var exterior = criterios.SoloConExistencia ? "WHERE \"Existencia\" <> 0 OR \"Valor\" <> 0" : string.Empty;
 
         var filasSql = $"""
             WITH mp AS (

@@ -122,8 +122,11 @@ public static class DependencyInjection
         services.AddScoped<INotaCreditoVentaDatos, NotaCreditoVentaDatos>();
         services.AddScoped<INotaCreditoVentaBorradorReadRepository, DapperNotaCreditoVentaBorradorReadRepository>();
         services.AddScoped<INotaCreditoVentaReadRepository, DapperNotaCreditoVentaReadRepository>();
+        services.AddScoped<OpenSource1.Application.Features.FacturasVenta.Notas.INotasFacturaReadRepository, DapperNotasFacturaReadRepository>();
         services.AddScoped<IMovimientoClienteReadRepository, DapperMovimientoClienteReadRepository>();
         services.AddScoped<IInventarioConsultasReadRepository, DapperInventarioConsultasRepository>();
+        services.AddScoped<OpenSource1.Application.Features.Reportes.IReportesReadRepository, DapperReportesReadRepository>();
+        services.AddScoped<OpenSource1.Application.Features.Reportes.IReportesExportacion, OpenSource1.Infrastructure.Services.Reportes.ReportesExportacionService>();
         services.AddScoped<IConversionUnidadMedidaService, ConversionUnidadMedidaService>();
         services.AddScoped<IGeneradorNumeroDocumento, GeneradorNumeroDocumento>();
         services.AddScoped<ISerieReadRepository, DapperSerieReadRepository>();

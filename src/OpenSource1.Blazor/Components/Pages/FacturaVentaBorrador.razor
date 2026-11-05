@@ -474,7 +474,10 @@ else
         DeleteInput ??= new();
 
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
-        (canAdd, canModify, canDelete) = (permisos.CanAdd, permisos.CanModify, permisos.CanDelete);
+        // Legacy: (canAdd, canModify, canDelete) = (permisos.CanAdd, permisos.CanModify, permisos.CanDelete);
+        canAdd = await permisos.PuedeAsync(ApplicationPolicies.CanCapturarFactura);
+        canModify = await permisos.PuedeAsync(ApplicationPolicies.CanEmitirFactura);
+        canDelete = permisos.CanDelete;
 
         try
         {

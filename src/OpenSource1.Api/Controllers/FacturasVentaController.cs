@@ -8,6 +8,7 @@ using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Queries;
 using OpenSource1.Application.Features.FacturasVenta.Calculo;
 using OpenSource1.Application.Features.FacturasVenta.Copia;
+using OpenSource1.Application.Features.FacturasVenta.Notas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas;
 using OpenSource1.Application.Features.FacturasVenta.Posteo;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
@@ -29,6 +30,17 @@ namespace OpenSource1.Api.Controllers;
 public sealed class FacturasVentaController(ISender sender) : ControllerBase
 {
     // ----- Facturas posteadas (Task 6.3) -----
+
+    /// <summary>All credit notes, credited/returned quantities by line and open drafts of this exact invoice, without page truncation.</summary>
+    [HttpGet("{numero:maxlength(20)}/notas-credito")]
+    [Authorize(Policy = ApplicationPolicies.CanConsult)]
+    [ProducesResponseType<NotasFacturaResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetNotasFactura(string numero, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetNotasFacturaQuery(numero), cancellationToken);
+        return result.EsFallo ? result.ToActionResult() : Ok(result.Valor);
+    }
 
     /// <summary>
     /// Facturas posteadas, paginadas; por defecto por número descendente (lo último posteado primero). <c>socioId</c> filtra
@@ -76,7 +88,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     /// numeración.
     /// </summary>
     [HttpPost("{numero:maxlength(20)}/copiar-a-borrador")]
-    [Authorize(Policy = ApplicationPolicies.CanAdd)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanAdd)]
+    [Authorize(Policy = ApplicationPolicies.CanCapturarFactura)]
     [ProducesResponseType<CopiaFacturaResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -128,7 +141,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     }
 
     [HttpPost("borradores")]
-    [Authorize(Policy = ApplicationPolicies.CanAdd)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanAdd)]
+    [Authorize(Policy = ApplicationPolicies.CanCapturarFactura)]
     [ProducesResponseType<FacturaVentaBorradorResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateBorrador(CreateFacturaVentaBorradorRequest request, CancellationToken cancellationToken)
@@ -145,7 +159,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     }
 
     [HttpPut("borradores/{id:guid}")]
-    [Authorize(Policy = ApplicationPolicies.CanModify)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanModify)]
+    [Authorize(Policy = ApplicationPolicies.CanEmitirFactura)]
     [ProducesResponseType<FacturaVentaBorradorResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -173,7 +188,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     }
 
     [HttpPost("borradores/{id:guid}/liberar")]
-    [Authorize(Policy = ApplicationPolicies.CanModify)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanModify)]
+    [Authorize(Policy = ApplicationPolicies.CanEmitirFactura)]
     [ProducesResponseType<FacturaVentaBorradorResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -184,7 +200,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     }
 
     [HttpPost("borradores/{id:guid}/reabrir")]
-    [Authorize(Policy = ApplicationPolicies.CanModify)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanModify)]
+    [Authorize(Policy = ApplicationPolicies.CanEmitirFactura)]
     [ProducesResponseType<FacturaVentaBorradorResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -199,7 +216,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     /// Admite un borrador Abierta o Liberada. 200 con el número de la factura, su total y el número del registro contable.
     /// </summary>
     [HttpPost("borradores/{id:guid}/postear")]
-    [Authorize(Policy = ApplicationPolicies.CanModify)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanModify)]
+    [Authorize(Policy = ApplicationPolicies.CanEmitirFactura)]
     [ProducesResponseType<ResultadoPosteoFactura>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -233,7 +251,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     }
 
     [HttpPost("borradores/{id:guid}/lineas")]
-    [Authorize(Policy = ApplicationPolicies.CanAdd)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanAdd)]
+    [Authorize(Policy = ApplicationPolicies.CanCapturarFactura)]
     [ProducesResponseType<LineaFacturaVentaBorradorResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -262,7 +281,8 @@ public sealed class FacturasVentaController(ISender sender) : ControllerBase
     }
 
     [HttpPut("lineas-borrador/{id:guid}")]
-    [Authorize(Policy = ApplicationPolicies.CanModify)]
+    // Legacy: [Authorize(Policy = ApplicationPolicies.CanModify)]
+    [Authorize(Policy = ApplicationPolicies.CanEmitirFactura)]
     [ProducesResponseType<LineaFacturaVentaBorradorResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

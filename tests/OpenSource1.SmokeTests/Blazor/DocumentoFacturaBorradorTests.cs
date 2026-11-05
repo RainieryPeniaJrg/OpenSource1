@@ -31,6 +31,19 @@ public sealed class DocumentoFacturaBorradorTests
     private static string Url(Guid id) => $"/facturas-venta/borradores/{id}";
 
     [Fact]
+    public async Task Vendedor_EditaCabeceraYLineasYPostea_SinEliminar()
+    {
+        using var app = Configurar(new BlazorSsrFactory());
+
+        var html = await HtmlSsr.HtmlAsync(app.Cliente("Vendedor"), Url(IdAbierto));
+
+        Assert.Contains("data-testid=\"guardar-cabecera\"", html);
+        Assert.Contains("data-testid=\"fila-nueva\"", html);
+        Assert.Contains($"href=\"{Url(IdAbierto)}?postear=true\"", html);
+        Assert.DoesNotContain($"href=\"{Url(IdAbierto)}?eliminar=true\"", html);
+    }
+
+    [Fact]
     public async Task PaginaUnica_CabeceraEditable_Lineas_FilaNueva_TotalesYBarra()
     {
         using var app = Configurar(new BlazorSsrFactory());

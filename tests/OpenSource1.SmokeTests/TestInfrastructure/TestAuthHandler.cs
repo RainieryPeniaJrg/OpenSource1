@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenSource1.Application.Security;
 
 namespace OpenSource1.SmokeTests.TestInfrastructure;
 
@@ -40,6 +41,8 @@ public sealed class TestAuthHandler(
         };
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        claims.AddRange(roles.SelectMany(PermisosPorRol.ParaRol).Distinct()
+            .Select(permission => new Claim("permission", permission)));
 
         var identity = new ClaimsIdentity(claims, Scheme.Name);
         var principal = new ClaimsPrincipal(identity);

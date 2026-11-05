@@ -1,0 +1,65 @@
+name: Part 2 isolated end-to-end validation
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [parte2_opensource_2, main, QA, deploy]
+permissions:
+  contents: read
+jobs:
+  parte2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+      - name: Private ephemeral demo environment
+        run: python3 scripts/parte2-env.py
+      - name: Build and start dedicated lab
+        run: docker compose --env-file .local/parte2.env -f docker-compose.parte2.yml up -d --build
+      - name: Wait for login service
+        run: |
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://localhost:18081/health/live; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Install browser tests
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Validate browser regression, business process, reports and downloads
+        working-directory: tests/e2e
+        env:
+          E2E_PARTE2: '1'
+          E2E_BASE_URL: http://localhost:18080
+          E2E_API_URL: http://localhost:18081
+          E2E_REPORT_DIR: ../../docs/entregable-parte-2/evidencias/reporte-e2e
+          E2E_CAPTURAS: ../../.local/regression-screenshots
+        run: |
+          set -a
+          source ../../.local/parte2.env
+          set +a
+          export E2E_PASSWORD="$AUTH_SEED_DEFAULT_PASSWORD"
+          mkdir -p ../../.local/regression-screenshots
+          npx playwright test
+      - name: Verify controlled API outage
+        run: |
+          trap 'docker compose --env-file .local/parte2.env -f docker-compose.parte2.yml start api' EXIT
+          docker compose --env-file .local/parte2.env -f docker-compose.parte2.yml stop api
+          python3 scripts/parte2-e2e.py --api-caida
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parte2-evidence
+          path: |
+            tests/e2e/test-results
+            docs/entregable-parte-2/evidencias/reporte-e2e
+            docs/entregable-parte-2/evidencias/reporte-api-caida
+      - name: Remove only this job's lab
+        if: always()
+        run: docker compose --env-file .local/parte2.env -f docker-compose.parte2.yml down -v

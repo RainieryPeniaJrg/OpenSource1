@@ -40,6 +40,7 @@ public sealed class IdentitySeedHostedService(
         await EnsureUserAsync(userManager, "admin",      "admin@opensource1.local",      "Administrador",    ApplicationRoles.Administrator, seedOptions.Value.DefaultPassword);
         await EnsureUserAsync(userManager, "supervisor", "supervisor@opensource1.local",  "Supervisor",       ApplicationRoles.Supervisor,    seedOptions.Value.DefaultPassword);
         await EnsureUserAsync(userManager, "ejecutor",   "ejecutor@opensource1.local",    "Ejecutor",         ApplicationRoles.Executor,      seedOptions.Value.DefaultPassword);
+        await EnsureUserAsync(userManager, "vendedor",   "vendedor@opensource1.local",    "Vendedor",         ApplicationRoles.Salesperson,   seedOptions.Value.DefaultPassword);
 
         // Equipo realista adicional
         await EnsureUserAsync(userManager, "cmendes",    "carlos.mendes@opensource1.local",  "Carlos Méndez",       ApplicationRoles.Administrator, seedOptions.Value.DefaultPassword);
