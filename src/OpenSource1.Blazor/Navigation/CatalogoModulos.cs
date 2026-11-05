@@ -55,6 +55,7 @@ public static class CatalogoModulos
         new("costo-inventario", "contabilidad", "Costo de inventario", "Ajuste y posteo del costo de inventario.", "/contabilidad", IconosModulo.Reloj, Consultar, null, ["costo", "ajuste"]),
 
         new("reporteria", "reportes", "Reportería", "Reportes PDF y Excel de clientes y productos.", "/reporteria", IconosModulo.Descargar, Consultar, null, ["pdf", "excel", "reporte"]),
+        new("reporteria-empresarial", "reportes", "Reportes empresariales", "Ventas, inventario, productos más vendidos y cuentas por cobrar.", "/reporteria/empresarial", IconosModulo.Grafico, Consultar, null, ["ventas", "inventario", "cxc", "pdf", "excel"]),
         new("bitacora", "reportes", "Bitácora", "Registro de actividad del sistema.", "/bitacora", IconosModulo.Reloj, null, AdminSupervisor, ["auditoria", "log", "actividad"]),
 
         new("terminos-pago", "configuracion", "Términos de pago", "Vencimiento y descuento por pronto pago.", "/terminos-pago", IconosModulo.Calendario, Consultar, null, ["credito", "dias"]),

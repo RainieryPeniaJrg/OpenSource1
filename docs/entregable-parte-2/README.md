@@ -1,0 +1,51 @@
+# AxionERP — Part 2
+
+This delivery extends Part 1 on branch `parte2_opensource_2`, based on `45bc4bc`.
+The original assignment is preserved in [requisitos.md](requisitos.md).
+
+## Delivery contents
+
+- [Technical report and permission matrix](informe-tecnico.md).
+- [Demonstration script](guion-demo.md).
+- [Analysis and execution plan](../superpowers/plans/2026-11-03-parte2-opensource-2.md).
+- [Test evidence](evidencias/validacion.md).
+- [Presentation (PowerPoint)](presentacion.pptx) and [PDF slides](presentacion.pdf), with speaker notes and a reproducible generator at `tests/e2e/scripts/parte2-deck.cjs`.
+- Business reports: `/reporteria/empresarial`; existing master-data reports remain at `/reporteria`.
+- Reproducible isolated environment: `docker-compose.parte2.yml`.
+- Production reference: `docker-compose.production.yml` and `deploy/Caddyfile`.
+
+## Run the isolated demonstration
+
+```bash
+python3 scripts/parte2-env.py
+docker compose --env-file .local/parte2.env -f docker-compose.parte2.yml up -d --build
+python3 scripts/parte2-e2e.py
+```
+
+Web: `http://localhost:18080`; API: `http://localhost:18081`; dedicated database: `127.0.0.1:65433`.
+Credentials are generated in `.local/parte2.env` (permissions 0600, excluded from Git and Docker build contexts).
+The initial users are `admin`, `supervisor`, `ejecutor`, and `vendedor`; use the private seed password.
+Do not publish the environment file or copy credentials into evidence.
+
+Run the existing browser scenarios as well with `python3 scripts/parte2-e2e.py --regression`.
+The API-outage scenario is a separate opt-in run (`--api-caida`), with only this lab's API stopped and restarted around the test. It uses a different output folder so it does not overwrite the successful business-process artifacts. `scripts/parte2-evidencias.py` collects successful screenshots/downloads, `scripts/parte2-resultados.py` builds the compact regression receipt, and `scripts/parte2-evidence-audit.py` checks delivery files and embedded archives for private lab credentials.
+
+The scenario creates immutable business documents in this dedicated database. Do not point it at a shared or production installation.
+To stop this lab without deleting its evidence data:
+
+```bash
+docker compose --env-file .local/parte2.env -f docker-compose.parte2.yml stop
+```
+
+## Production operation
+
+The production Compose file is a reference for a single Blazor replica behind Caddy TLS; it is not deployed by this delivery.
+Set a real DNS hostname in `AXION_HOST`, independent random PostgreSQL and JWT credentials, and verify that its private subnet is free.
+Only ports 80/443 are public; API/database remain on an internal network. `/uploads` is served by authenticated Blazor, never directly by the proxy.
+The proxy address is explicitly trusted; wildcard forwarded-header trust is rejected. Production authentication, session and antiforgery cookies require HTTPS.
+
+Before first public startup, apply migrations through a controlled administrative operation and provision the initial administrator and roles; automatic migrations and demo seeding are disabled in this configuration. Back up both databases and uploads before upgrades. Several historical migration reversals discard data; restoring a tested backup is the safe recovery approach.
+
+Sessions currently use the existing in-memory store: a restart requires login again. Persistent Data Protection keys preserve key material, not server session data. Use one replica; moving to multiple replicas requires a shared session store and separately tested deployment. No high-availability claim is made.
+
+Rotate any credentials previously exposed in repository history through the actual secret owner. Removing files or supplying a new demo environment does not rotate an existing installation. DNS, public TLS issuance, secret rotation and production acceptance require a real target and are not represented as completed by a local demo.

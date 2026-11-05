@@ -1,6 +1,7 @@
 using MediatR;
 using OpenSource1.Application.Data.UnitOfWork;
 using OpenSource1.Application.Services.Clientes;
+using OpenSource1.Application.Services.Contabilidad;
 using OpenSource1.Application.Services.Registro;
 using OpenSource1.Core.Common;
 using OpenSource1.Core.Enums;
@@ -8,7 +9,8 @@ using OpenSource1.Core.Enums;
 namespace OpenSource1.Application.Features.Cobros;
 
 /// <summary>
-/// Aplicación de un pago a una factura (Task 6.5), en UNA transacción propia y sin asiento.
+/// Aplicación de un pago a una factura, en UNA transacción propia. Si las CxC congeladas difieren,
+/// agrega un asiento de reclasificación por el importe aplicado sin modificar los asientos originales.
 /// <list type="number">
 /// <item>Entrada: Ids positivos y distintos, importe &gt; 0 con 2 decimales como máximo.</item>
 /// <item>Bloqueo <c>FOR UPDATE</c> de los dos movimientos en orden de Id (<see cref="IRegistroMovimientosCliente.BloquearMovimientosAsync"/>):
@@ -16,13 +18,15 @@ namespace OpenSource1.Application.Features.Cobros;
 /// <item>Mismo socio en ambos movimientos (<c>clientes.socios_distintos</c>) ANTES de bloquear el socio.</item>
 /// <item>Socio (<c>FOR SHARE</c>): un socio bloqueado <c>Todo</c> no admite aplicaciones (como no admite pagos); bloqueado solo para
 /// <c>Facturacion</c>, sí.</item>
-/// <item>Fecha de la aplicación (la indicada o la de hoy) dentro de las fechas de registro permitidas (Task 8.5).</item>
+/// <item>Fecha de la aplicación (la indicada o la de hoy) dentro de las fechas de registro permitidas y no anterior
+/// a ninguno de los movimientos. Las cuentas CxC distintas generan una reclasificación por el importe aplicado.</item>
 /// <item><see cref="IRegistroMovimientosCliente.AplicarAsync"/> valida con los restantes posteriores al bloqueo (mismo socio, signos,
 /// importe ≤ mínimo de los restantes) antes de insertar las dos filas Aplicación.</item>
 /// </list>
 /// <para>
 /// Orden de locks: movimientos de cliente (<c>FOR UPDATE</c>, orden de Id: ocupan el lugar del "documento", el primero del orden
-/// global) → socios (<c>FOR SHARE</c>). El posteo de facturas y el pago bloquean socios <c>FOR SHARE</c> pero nunca esperan por un
+/// global) → socios (<c>FOR SHARE</c>) → cuentas → libro contable → serie de asientos (solo si se reclasifica).
+/// El posteo de facturas y el pago bloquean socios <c>FOR SHARE</c> pero nunca esperan por un
 /// movimiento de cliente existente (solo insertan movimientos nuevos), así que no se forma ningún ciclo.
 /// </para>
 /// </summary>
@@ -30,7 +34,9 @@ public sealed class AplicarPagoCommandHandler(
     IUnitOfWork unitOfWork,
     IRegistroMovimientosCliente registroClientes,
     ICobroDatos datos,
-    IValidadorFechaRegistro validadorFecha)
+    // Original: IValidadorFechaRegistro validadorFecha)
+    IValidadorFechaRegistro validadorFecha,
+    IRegistroContable registroContable)
     : IRequestHandler<AplicarPagoCommand, Result<ResultadoAplicacionPago>>
 {
     public async Task<Result<ResultadoAplicacionPago>> Handle(AplicarPagoCommand request, CancellationToken cancellationToken)
@@ -111,10 +117,34 @@ public sealed class AplicarPagoCommandHandler(
 
         // Fechas de registro permitidas (Task 8.5): la fecha EFECTIVA de la aplicación (la indicada o la de hoy).
         var fechaRegistro = request.FechaRegistro ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        if (fechaRegistro < factura.FechaRegistro || fechaRegistro < pago.FechaRegistro)
+        {
+            return Fallo(new Error(
+                "cobro.fecha_anterior_documentos",
+                "La fecha de aplicación no puede ser anterior a la factura ni al pago.", "FechaRegistro"));
+        }
+
         var fecha = await validadorFecha.ValidarAsync(fechaRegistro, cancellationToken);
         if (fecha.EsFallo)
         {
             return Fallo([.. fecha.Errores]);
+        }
+
+        // Both rows remain locked. For valid remaining amounts, validate and post the reclassification
+        // before writing customer details; a blocked account therefore leaves both ledgers untouched.
+        // Invalid signs/remaining amounts are delegated to the existing writer's detailed errors.
+        if (factura.ImporteRestante > 0m && pago.ImporteRestante < 0m
+            && request.Importe <= Math.Min(factura.ImporteRestante, -pago.ImporteRestante))
+        {
+            var reclasificacion = ReclasificacionCxC.Construir(factura, pago, request.Importe, fechaRegistro);
+            if (reclasificacion is not null)
+            {
+                var asiento = await registroContable.RegistrarAsync(reclasificacion, cancellationToken);
+                if (asiento.EsFallo)
+                {
+                    return Result<ResultadoAplicacionPago>.Fallo(asiento);
+                }
+            }
         }
 
         var aplicacion = await registroClientes.AplicarAsync(new AplicacionClienteSolicitud(

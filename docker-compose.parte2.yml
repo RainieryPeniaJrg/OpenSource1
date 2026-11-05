@@ -1,0 +1,49 @@
+name: axion-parte2
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: Rainiery
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Use a private Parte 2 environment file}
+      POSTGRES_DB: postgres
+    ports: ["127.0.0.1:${PARTE2_POSTGRES_PORT:-65433}:5432"]
+    volumes:
+      - parte2-postgres:/var/lib/postgresql/data
+      - ./init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U Rainiery -d postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  api:
+    build: { context: ., dockerfile: Dockerfile.api }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Database=AxionERP_App;Username=Rainiery;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__IdentityConnection: Host=postgres;Database=AxionERP_Identity;Username=Rainiery;Password=${POSTGRES_PASSWORD}
+      Jwt__Issuer: AxionERP.Parte2
+      Jwt__Audience: AxionERP.Parte2
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set a random JWT signing key}
+      Cors__AllowedOrigins__0: http://localhost:18080
+      Database__ApplyMigrationsOnStartup: "true"
+      Database__RecreateOnPendingModelChangesInDevelopment: "false"
+      UserSeed__Enabled: "true"
+      UserSeed__DefaultPassword: ${AUTH_SEED_DEFAULT_PASSWORD:?Set a private demo password}
+    ports: ["127.0.0.1:${PARTE2_API_PORT:-18081}:8080"]
+    depends_on: { postgres: { condition: service_healthy } }
+  blazor:
+    build: { context: ., dockerfile: Dockerfile.blazor }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Api__BaseAddress: http://api:8080/
+    ports: ["127.0.0.1:${PARTE2_WEB_PORT:-18080}:8080"]
+    volumes:
+      - parte2-keys:/root/.aspnet/DataProtection-Keys
+      - parte2-uploads:/app/storage/uploads
+    depends_on: [api]
+volumes:
+  parte2-postgres:
+  parte2-keys:
+  parte2-uploads:

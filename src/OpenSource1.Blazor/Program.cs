@@ -14,6 +14,9 @@ using OpenSource1.Blazor.Services;
 using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddProductionHttpSecurity(builder.Configuration);
+if (!builder.Environment.IsDevelopment())
+    builder.Services.AddAntiforgery(options => options.Cookie.SecurePolicy = CookieSecurePolicy.Always);
 
 QuestPDF.Settings.License = LicenseType.Community;
 
@@ -22,13 +25,18 @@ builder.Services.AddRazorComponents();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSingleton<ReporteEmpresarialDocumentService>();
+builder.Services.AddHttpClient<ReportesEmpresarialesApiClient>((services, client) =>
+    client.BaseAddress = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiClientOptions>>().Value.BaseAddress)
+    .AddHttpMessageHandler<BearerTokenHandler>();
 builder.Services.AddSession(options =>
 {
     options.Cookie.Name = "OpenSource1.Session";
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    // Part 1: options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
     options.IdleTimeout = TimeSpan.FromMinutes(30);
 });
 
@@ -166,7 +174,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.Name = "OpenSource1.Auth";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        // Part 1: options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
         options.LoginPath = "/account/login";
         options.LogoutPath = "/account/logout";
         options.AccessDeniedPath = "/access-denied";
@@ -179,6 +188,9 @@ builder.Services.AddScoped<IRegistroModulos, RegistroModulos>();
 builder.Services.AddScoped<IIndicadoresModulos, IndicadoresModulos>();
 
 var app = builder.Build();
+app.UseForwardedHeaders();
+app.MapHealthChecks("/health/live");
+app.MapReportesEmpresariales();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

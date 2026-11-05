@@ -84,7 +84,8 @@ public static class DependencyInjection
         services.AddAuthorization(options =>
         {
             options.AddPolicy(ApplicationPolicies.CanConsult, policy =>
-                policy.RequireRole(ApplicationRoles.Administrator, ApplicationRoles.Supervisor, ApplicationRoles.Executor));
+                // Legacy: policy.RequireRole(ApplicationRoles.Administrator, ApplicationRoles.Supervisor, ApplicationRoles.Executor));
+                policy.RequireRole(ApplicationRoles.Administrator, ApplicationRoles.Supervisor, ApplicationRoles.Executor, ApplicationRoles.Salesperson));
             options.AddPolicy(ApplicationPolicies.CanAdd, policy =>
                 policy.RequireRole(ApplicationRoles.Administrator, ApplicationRoles.Executor));
             options.AddPolicy(ApplicationPolicies.CanModify, policy =>
@@ -93,6 +94,16 @@ public static class DependencyInjection
                 policy.RequireRole(ApplicationRoles.Administrator));
             options.AddPolicy(ApplicationPolicies.CanAdministrar, policy =>
                 policy.RequireRole(ApplicationRoles.Administrator));
+            options.AddPolicy(ApplicationPolicies.CanCapturarFactura, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireAssertion(context => context.User.IsInRole(ApplicationRoles.Administrator)
+                    || context.User.IsInRole(ApplicationRoles.Executor)
+                    || context.User.HasClaim("permission", Permisos.Facturacion.Factura.Capturar)));
+            options.AddPolicy(ApplicationPolicies.CanEmitirFactura, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireAssertion(context => context.User.IsInRole(ApplicationRoles.Administrator)
+                    || context.User.IsInRole(ApplicationRoles.Supervisor)
+                    || context.User.HasClaim("permission", Permisos.Facturacion.Factura.Emitir)));
         });
 
         // Catálogo de permisos finos por recurso (Permisos.*), resuelto al vuelo para nombres de

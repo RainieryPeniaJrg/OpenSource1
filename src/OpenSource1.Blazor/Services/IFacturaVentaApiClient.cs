@@ -1,6 +1,7 @@
 using OpenSource1.Application.Features.FacturasVenta.Borradores.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Calculo;
 using OpenSource1.Application.Features.FacturasVenta.Copia;
+using OpenSource1.Application.Features.FacturasVenta.Notas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
 using OpenSource1.Application.Features.FacturasVenta.Posteo;
@@ -60,6 +61,9 @@ public interface IFacturaVentaApiClient
 
     /// <summary><see langword="null"/> = no existe una factura posteada con ese número (404).</summary>
     Task<FacturaVentaDetalleResponse?> GetFacturaAsync(string numero, CancellationToken cancellationToken = default);
+
+    /// <summary>Exact, complete credit summary from one server snapshot; null when the invoice does not exist.</summary>
+    Task<NotasFacturaResponse?> GetNotasFacturaAsync(string numero, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copia una factura posteada a un borrador nuevo (CanAdd). Éxito: id y número del borrador y avisos (líneas omitidas o

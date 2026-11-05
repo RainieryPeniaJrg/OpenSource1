@@ -16,6 +16,21 @@ namespace OpenSource1.SmokeTests.Blazor;
 public sealed class FacturaVentaApiClientTests
 {
     [Fact]
+    public async Task NotasFactura_LeeElResumenCompleto_ConNumeroCodificado()
+    {
+        var handler = new Grabador(HttpStatusCode.OK,
+            """{"notas":[],"lineas":[{"lineaFacturaVentaId":5,"cantidad":3,"importe":30,"devuelto":2}],"borradores":[]}""");
+        var client = new FacturaVentaApiClient(Http(handler), NullLogger<FacturaVentaApiClient>.Instance);
+
+        var resumen = await client.GetNotasFacturaAsync("FV 1");
+
+        Assert.NotNull(resumen);
+        Assert.EndsWith("/api/facturas-venta/FV%201/notas-credito", handler.Uri!.AbsolutePath);
+        var linea = Assert.Single(resumen.Lineas);
+        Assert.Equal((5L, 3m, 30m, 2m), (linea.LineaFacturaVentaId, linea.Cantidad, linea.Importe, linea.Devuelto));
+    }
+
+    [Fact]
     public async Task UpdateBorrador_EnviaSiempreAmbosSocios_YElXmin()
     {
         var handler = new Grabador(HttpStatusCode.OK, BorradorJson);

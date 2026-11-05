@@ -165,7 +165,21 @@ public sealed class ClientesVistasApiTests(PostgresTestFixture fixture) : IClass
         var socio = await CrearSocioAsync($"{Prefijo()} Aplicacion adelantada", _termino30);
         var factura = await PostearFacturaAsync(socio, new DateOnly(2026, 6, 1), 100m); // 118, vence el 01/07
         var pago = await RegistrarPagoAsync(socio, 50m, new DateOnly(2026, 7, 10));
-        await AplicarAsync(factura, pago, 50m, new DateOnly(2026, 6, 20)); // fecha de aplicación anterior al pago
+        // Part 1: await AplicarAsync(factura, pago, 50m, new DateOnly(2026, 6, 20));
+        // New writes reject this chronology. Preserve coverage of already-existing legacy books
+        // by seeding the two historical, append-only application rows directly in the test database.
+        await using var legado = new NpgsqlConnection(fixture.AppConnectionString);
+        await legado.ExecuteAsync("""
+            INSERT INTO "MovimientosClienteDetalle" (
+                "MovimientoClienteId", "TipoMovimiento", "Importe", "FechaRegistro", "MovimientoClienteAplicadoId",
+                "TipoOrigen", "ClaveOrigen", "CreatedAtUtc", "CreatedBy", "UsuarioId")
+            SELECT m."Id", @Tipo, v.importe, @Fecha, v.contraparte,
+                   @Origen, 'test:aplicacion-heredada', m."CreatedAtUtc", m."CreatedBy", m."UsuarioId"
+            FROM (VALUES (@Factura::bigint, -50::numeric, @Pago::bigint),
+                         (@Pago::bigint, 50::numeric, @Factura::bigint)) v(id, importe, contraparte)
+            JOIN "MovimientosCliente" m ON m."Id" = v.id
+            """, new { Factura = factura, Pago = pago, Fecha = new DateOnly(2026, 6, 20),
+                Tipo = (short)TipoDetalleCliente.Aplicacion, Origen = (short)TipoOrigenMovimiento.Cobro });
 
         // Al 30/06 el pago no existe: la factura sigue en 118 (no 68) y el total es el saldo contable de CxC a esa fecha.
         var junio = Assert.Single((await EstadoAsync($"fechaCorte=2026-06-30&socioId={socio}")).Pagina.Items);

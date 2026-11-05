@@ -3,6 +3,7 @@ extern alias BlazorApp;
 using BlazorApp::OpenSource1.Blazor.Services;
 using Moq;
 using OpenSource1.Application.Features.FacturasVenta.Copia;
+using OpenSource1.Application.Features.FacturasVenta.Notas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas;
 using OpenSource1.Application.Features.FacturasVenta.Posteadas.Dtos;
 using OpenSource1.Application.Features.NotasCreditoVenta.Posteadas;
@@ -207,6 +208,10 @@ public sealed class DocumentosPosteadosTests
             AlmacenCodigo = "PRINC", Moneda = "DOP", ImporteSinIva = 180m, ImporteIva = 32.40m, ImporteTotal = 212.40m,
         };
         var facturas = app.Simular<IFacturaVentaApiClient>();
+        facturas.Setup(c => c.GetNotasFacturaAsync("FV-000009", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotasFacturaResponse(
+                [new NotaCreditoVentaResponse { Numero = "NC-000003", FacturaVentaNumero = "FV-000009" }],
+                [new CreditoLineaFacturaResponse(101, 1m, 90m, 1m)], []));
         facturas.Setup(c => c.GetFacturaAsync("FV-000009", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new FacturaVentaDetalleResponse(cabecera,
                 [
@@ -244,6 +249,8 @@ public sealed class DocumentosPosteadosTests
         Assert.Contains("180.00", producto);
         Assert.Contains("1 · 90.00", producto);
         Assert.Contains("devuelto 1", producto);
+        facturas.Verify(c => c.GetNotasFacturaAsync("FV-000009", It.IsAny<CancellationToken>()), Times.Once);
+        notas.Verify(c => c.GetNotaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
 
         // Línea de comentario: sin columnas numéricas ni acreditado.
         var comentario = Fila(html, "Nota interna");
@@ -374,6 +381,8 @@ public sealed class DocumentosPosteadosTests
                 [new LineaIvaFacturaVentaResponse { IdentificadorIva = "ITBIS18", PorcentajeIva = 18m, BaseImponible = 100m, ImporteIva = 18m }]));
         facturas.Setup(c => c.ListFacturasAsync(It.IsAny<FacturaVentaSearchCriteria?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PagedResult<FacturaVentaResponse>([cabecera], 1, 50, 1));
+        facturas.Setup(c => c.GetNotasFacturaAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotasFacturaResponse([], [], []));
 
         var notas = app.Simular<INotaCreditoVentaApiClient>();
         notas.Setup(c => c.ListNotasAsync(It.IsAny<NotaCreditoVentaSearchCriteria?>(), It.IsAny<PageRequest?>(), It.IsAny<CancellationToken>()))

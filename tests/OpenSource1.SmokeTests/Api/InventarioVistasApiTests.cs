@@ -246,6 +246,31 @@ public sealed class InventarioVistasApiTests(PostgresTestFixture fixture) : ICla
     // ── Review Focus 4: existencias y valor ─────────────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task Existencias_SoloConExistencia_ConservaValorResidualSinCantidad()
+    {
+        var producto = await _prueba.SembrarProductoAsync();
+        var almacen = await _prueba.SembrarAlmacenAsync();
+        // A rounding entry can retain value after the physical quantity has reached zero.
+        await using (var contexto = _prueba.NuevoContexto())
+        {
+            contexto.MovimientosValor.Add(new OpenSource1.Core.Entities.Inventario.MovimientoValor
+            {
+                ProductoId = producto, AlmacenId = almacen, TipoValor = TipoValor.Redondeo,
+                TipoMovimiento = TipoMovimientoInventario.AjustePositivo, FechaRegistro = D1,
+                ImporteCosto = 0.01m, Ajuste = true, TipoOrigen = TipoOrigenMovimiento.AjusteCosto,
+                ClaveOrigen = Guid.NewGuid().ToString(), CreatedBy = "test", CreatedAtUtc = DateTimeOffset.UtcNow
+            });
+            await contexto.SaveChangesAsync();
+        }
+        var r = await GetAsync<ExistenciasVistaResponse>($"{UrlExistencias}?productoId={producto}&fecha={D1:yyyy-MM-dd}&soloConExistencia=true");
+        var fila = Assert.Single(r.Pagina.Items);
+        Assert.Equal(0m, fila.Existencia);
+        Assert.Equal(0.01m, fila.Valor);
+        Assert.Equal(0.01m, r.ValorTotal);
+        Assert.Null(fila.CostoMedio);
+    }
+
+    [Fact]
     public async Task ReviewFocus4_ExistenciaYValorPorAlmacen_CoincidenConConsultaInventario_YConLa1301TrasElBatch()
     {
         var p1 = await ProductoClasificadoAsync();

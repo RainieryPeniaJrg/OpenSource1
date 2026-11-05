@@ -24,5 +24,13 @@ public static class PoliticasBlazor
         {
             options.AddPolicy(politica, policy => policy.RequireClaim("permission", politica));
         }
+        options.AddPolicy(ApplicationPolicies.CanCapturarFactura, policy => policy
+            .RequireAuthenticatedUser()
+            .RequireAssertion(context => context.User.HasClaim("permission", ApplicationPolicies.CanAdd)
+                || context.User.HasClaim("permission", Permisos.Facturacion.Factura.Capturar)));
+        options.AddPolicy(ApplicationPolicies.CanEmitirFactura, policy => policy
+            .RequireAuthenticatedUser()
+            .RequireAssertion(context => context.User.HasClaim("permission", ApplicationPolicies.CanModify)
+                || context.User.HasClaim("permission", Permisos.Facturacion.Factura.Emitir)));
     }
 }

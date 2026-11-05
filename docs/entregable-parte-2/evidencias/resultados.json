@@ -1,0 +1,77 @@
+{
+  "generatedUtc": "2026-11-04T12:34:04.624892+00:00",
+  "branch": "parte2_opensource_2",
+  "baseline": "45bc4bc",
+  "sourceAndTestsSha256": "c6148b898e65d024ba22c92d3b98fb6d6e2b35e43d83492cb8dba0e55243c63a",
+  "dotnetFullRun": {
+    "total": 2093,
+    "executed": 2093,
+    "passed": 2092,
+    "failed": 1,
+    "error": 0,
+    "timeout": 0,
+    "aborted": 0,
+    "inconclusive": 0,
+    "passedButRunAborted": 0,
+    "notRunnable": 0,
+    "notExecuted": 0,
+    "disconnected": 0,
+    "warning": 0,
+    "completed": 0,
+    "inProgress": 0,
+    "pending": 0
+  },
+  "dotnetValidationMode": "full-suite-plus-fixture-only-retest",
+  "dotnetFixtureRetest": {
+    "total": 20,
+    "executed": 20,
+    "passed": 20,
+    "failed": 0,
+    "error": 0,
+    "timeout": 0,
+    "aborted": 0,
+    "inconclusive": 0,
+    "passedButRunAborted": 0,
+    "notRunnable": 0,
+    "notExecuted": 0,
+    "disconnected": 0,
+    "warning": 0,
+    "completed": 0,
+    "inProgress": 0,
+    "pending": 0
+  },
+  "resolvedFixtureFailures": [
+    "OpenSource1.SmokeTests.Api.ClientesVistasApiTests.AplicacionFechadaAntesDelPago_NoReduceLaFacturaHastaQueElPagoExiste"
+  ],
+  "verifiedUniqueDotnetTests": 2093,
+  "unchangedProductAssemblies": {
+    "src/OpenSource1.Core/bin/Release/net10.0/OpenSource1.Core.dll": "cb316d0f17b2b4dbb210cfbeba5ce522e1f2d490a6b5c1ba76e2ef0d2b42cd58",
+    "src/OpenSource1.Application/bin/Release/net10.0/OpenSource1.Application.dll": "b53bb70392f01c90fb8d6c2b0414c4edd9a6a3656a04db4566c89f32c873197d",
+    "src/OpenSource1.Infrastructure/bin/Release/net10.0/OpenSource1.Infrastructure.dll": "119fafd114a50058a5c6bafde941d55b7a2485d811573926d028f049551c0ff5",
+    "src/OpenSource1.Api/bin/Release/net10.0/OpenSource1.Api.dll": "318105dfb068907ee80feeb9889e7456c36c7723840dc2bf498db2006038fe7f",
+    "src/OpenSource1.Blazor/bin/Release/net10.0/OpenSource1.Blazor.dll": "99801c0739e2ed546f2a41248fe30a6b5fea7cd22c8a209679ca00806fc633ff",
+    "tests/OpenSource1.SmokeTests/bin/Release/net10.0/OpenSource1.Core.dll": "cb316d0f17b2b4dbb210cfbeba5ce522e1f2d490a6b5c1ba76e2ef0d2b42cd58",
+    "tests/OpenSource1.SmokeTests/bin/Release/net10.0/OpenSource1.Application.dll": "b53bb70392f01c90fb8d6c2b0414c4edd9a6a3656a04db4566c89f32c873197d",
+    "tests/OpenSource1.SmokeTests/bin/Release/net10.0/OpenSource1.Infrastructure.dll": "119fafd114a50058a5c6bafde941d55b7a2485d811573926d028f049551c0ff5",
+    "tests/OpenSource1.SmokeTests/bin/Release/net10.0/OpenSource1.Api.dll": "318105dfb068907ee80feeb9889e7456c36c7723840dc2bf498db2006038fe7f",
+    "tests/OpenSource1.SmokeTests/bin/Release/net10.0/OpenSource1.Blazor.dll": "99801c0739e2ed546f2a41248fe30a6b5fea7cd22c8a209679ca00806fc633ff"
+  },
+  "fixtureRetestTrxSha256": "0c42954f144906ce341b1d5de4881337a1ea3fefab495ac64de0c84074e8c921",
+  "trxSha256": "18c714019a96e046ab9e1dce4fef945abfcbc9b7807330ea4256fe350224ddad",
+  "playwrightRegression": {
+    "total": 17,
+    "expected": 16,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 1,
+    "ok": true
+  },
+  "playwrightApiOutage": {
+    "total": 1,
+    "expected": 1,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0,
+    "ok": true
+  }
+}

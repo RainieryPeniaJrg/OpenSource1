@@ -100,7 +100,8 @@
     {
         AddInput ??= new() { FechaRegistroTexto = EntradaFecha.Formatear(DateOnly.FromDateTime(DateTime.Today)) };
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
-        canAdd = permisos.CanAdd;
+        // Legacy: canAdd = permisos.CanAdd;
+        canAdd = await permisos.PuedeAsync(ApplicationPolicies.CanCapturarFactura);
 
         if (canAdd)
         {

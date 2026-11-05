@@ -17,6 +17,7 @@
 <PageToolbar Titulo="Borradores de factura" Subtitulo="Facturas de venta en preparación: cabecera, líneas, liberación y posteo."
              Migas="@Migas" Permisos="@permisos"
              NuevoHref="@RetornoLocal.ConRetorno("/facturas-venta/nueva", UrlActual)" NuevoTexto="Nueva factura"
+             NuevoPermiso="@ApplicationPolicies.CanCapturarFactura" EditarPermiso="@ApplicationPolicies.CanEmitirFactura"
              SeleccionId="@BorradorSeleccionado?.Id.ToString()"
              Ver="@VerBorrador"
              EditarUrl="@(SeleccionNoEditable ? null : id => RetornoLocal.ConRetorno($"/facturas-venta/borradores/{id}", UrlActual))"
@@ -113,7 +114,8 @@
                             <td class="px-4 py-3 text-right">
                                 <div class="flex items-center justify-end gap-2">
                                     <a href="@($"/facturas-venta/borradores/{b.Id}")" class="btn-press rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100" title="Abrir borrador">Abrir</a>
-                                    @if (permisos?.CanModify == true && b.Estado == EstadoFacturaBorrador.Abierta)
+                                    @* Legacy: @if (permisos?.CanModify == true && b.Estado == EstadoFacturaBorrador.Abierta) *@
+                                    @if (puedeEmitir && b.Estado == EstadoFacturaBorrador.Abierta)
                                     {
                                         <a href="@RetornoLocal.ConRetorno($"/facturas-venta/borradores/{b.Id}", UrlActual)" class="btn-press rounded-lg border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100" title="Modificar cabecera">Modificar</a>
                                     }
@@ -193,6 +195,7 @@
     private string messageType = "info";
     private IReadOnlyList<string> errores = [];
     private PermisosPagina? permisos;
+    private bool puedeEmitir;
 
     private bool MuestraDialogoBorrar => DeleteId.HasValue && permisos?.CanDelete == true;
 
@@ -223,6 +226,7 @@
 
         DeleteInput ??= new();
         permisos = await PermisosPagina.CargarAsync(AuthorizationService, AuthenticationStateTask);
+        puedeEmitir = await permisos.PuedeAsync(ApplicationPolicies.CanEmitirFactura);
 
         await LoadAsync();
 

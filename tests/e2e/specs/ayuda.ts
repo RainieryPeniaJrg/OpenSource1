@@ -3,7 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // El paquete es ESM ("type": "module"): sin __dirname; la ruta se resuelve desde este archivo (tests/e2e/specs).
-export const CAPTURAS = fileURLToPath(new URL('../../../docs/entregable-parte-1/capturas/', import.meta.url));
+// Part 1: export const CAPTURAS = fileURLToPath(new URL('../../../docs/entregable-parte-1/capturas/', import.meta.url));
+export const CAPTURAS = process.env.E2E_CAPTURAS ?? fileURLToPath(new URL('../../../docs/entregable-parte-1/capturas/', import.meta.url));
 
 export const usuarios = {
   admin: process.env.E2E_ADMIN_USER ?? 'admin',

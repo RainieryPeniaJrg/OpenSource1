@@ -66,6 +66,14 @@ public static class PermisosPorRol
         ApplicationRoles.Administrator => Permisos.All.ToArray(),
         ApplicationRoles.Supervisor => Filtrar(AccionesConsultar, AccionesModificar),
         ApplicationRoles.Executor => Filtrar(AccionesConsultar, AccionesAgregar),
+        ApplicationRoles.Salesperson =>
+        [
+            Permisos.Maestros.Socio.Consultar,
+            Permisos.Maestros.Producto.Consultar,
+            Permisos.Inventario.Almacen.Consultar,
+            Permisos.Facturacion.Factura.Capturar,
+            Permisos.Facturacion.Factura.Emitir,
+        ],
         _ => []
     };
 

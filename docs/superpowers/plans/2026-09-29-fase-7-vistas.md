@@ -1,5 +1,7 @@
 # Fase 7 — Vistas de movimientos · Plan de implementación
 
+> Historical execution record. Its branch-integration statements and open checkboxes describe that phase's execution time, not the current branch. Part 2 starts at main `45bc4bc` with phases 0–8 already present. Current coverage, corrected residuals and validation are tracked in [the Part 2 plan](2026-11-03-parte2-opensource-2.md); this historical record is preserved rather than silently rewritten.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** vistas de consulta sobre los libros ya construidos (inventario, clientes, contabilidad): movimientos de

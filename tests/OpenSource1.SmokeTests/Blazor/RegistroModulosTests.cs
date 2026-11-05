@@ -185,7 +185,8 @@ public sealed class RegistroModulosTests
     {
         Assert.Contains(TextoBusqueda.FiltrarModulos(CatalogoModulos.Modulos, "categoria"), m => m.Clave == "categorias-producto");
         Assert.Equal(
-            ["movimientos-cliente", "estado-cuenta", "grupos-cliente-contable"],
+            // Part 1: ["movimientos-cliente", "estado-cuenta", "grupos-cliente-contable"],
+            ["movimientos-cliente", "estado-cuenta", "reporteria-empresarial", "grupos-cliente-contable"],
             TextoBusqueda.FiltrarModulos(CatalogoModulos.Modulos, "CXC").Select(m => m.Clave));
         Assert.Contains(TextoBusqueda.FiltrarModulos(CatalogoModulos.Modulos, "facturación"), m => m.Clave == "notas-credito");
         Assert.Empty(TextoBusqueda.FiltrarModulos(CatalogoModulos.Modulos, "  "));

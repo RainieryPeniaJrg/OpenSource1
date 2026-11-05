@@ -6,6 +6,9 @@ public static class ApplicationPolicies
     public const string CanModify = "CanModify";
     public const string CanDelete = "CanDelete";
     public const string CanConsult = "CanConsult";
+    // Invoice-scoped policies preserve legacy coarse grants without granting global writes to Vendedor.
+    public const string CanCapturarFactura = "CanCapturarFactura";
+    public const string CanEmitirFactura = "CanEmitirFactura";
 
     /// <summary>
     /// Configuración reservada al Administrador (Task 8.5: fechas de registro permitidas). En la API exige el rol

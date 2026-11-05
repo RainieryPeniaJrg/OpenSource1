@@ -1,0 +1,111 @@
+@page "/reporteria/empresarial"
+@attribute [Authorize(Policy = ApplicationPolicies.CanConsult)]
+@using OpenSource1.Application.Features.Reportes
+@using OpenSource1.Blazor.Reporting
+@using OpenSource1.Blazor.Services
+@inject ReportesEmpresarialesApiClient Reportes
+@inject ISocioNegocioApiClient Clientes
+@inject IProductoApiClient Productos
+@inject IAlmacenApiClient Almacenes
+
+<PageTitle>Reportes empresariales – AxionERP</PageTitle>
+<div class="mb-6">
+    <a href="/reporteria" class="text-sm underline">Volver a reportería</a>
+    <h1 class="text-2xl font-bold mt-3">Reportes empresariales</h1>
+    <p class="text-sm text-slate-500">Consulte ventas, inventario, productos más vendidos y cuentas por cobrar. Las descargas conservan los filtros e incluyen todas las páginas.</p>
+</div>
+<form method="get" action="/reporteria/empresarial" class="rounded-xl border p-5 mb-4 flex flex-wrap gap-4 items-end">
+        <label>Reporte<select name="tipo" class="block w-full rounded border p-2">
+            @foreach (var tipo in ReportesEmpresarialesApiClient.Tipos) { <option value="@tipo" selected="@(Tipo == tipo)">@ReportesEmpresarialesApiClient.Titulo(tipo)</option> }
+        </select></label>
+        <button type="submit" class="rounded border px-4 py-2">Cambiar reporte</button>
+</form>
+<form method="get" action="/reporteria/empresarial" class="rounded-xl border p-5 mb-6 space-y-4">
+    <input type="hidden" name="tipo" value="@Tipo" />
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        @if (Tipo is "ventas" or "top-productos")
+        {
+            <label>Fecha inicial<input type="date" name="desde" value="@Desde" max="@Hasta" class="block w-full rounded border p-2" /></label>
+            <label>Moneda<input name="moneda" value="@Moneda" required maxlength="3" pattern="[A-Z]{3}" class="block w-full rounded border p-2" /></label>
+        }
+        <label>Fecha final / corte<input type="date" name="hasta" value="@Hasta" min="@Desde" class="block w-full rounded border p-2" /></label>
+        @if (Tipo != "inventario") { <label>Cliente<select name="clienteId" class="block w-full rounded border p-2"><option value="">Todos</option>@foreach (var cliente in OpcionesClientes) { <option value="@cliente.Id" selected="@(ClienteId == cliente.Id.ToString())">@cliente.Codigo — @cliente.NombreComercial</option> }</select></label> }
+        @if (Tipo != "cuentas-por-cobrar") { <label>Producto<select name="productoId" class="block w-full rounded border p-2"><option value="">Todos</option>@foreach (var producto in OpcionesProductos) { <option value="@producto.Id" selected="@(ProductoId == producto.Id.ToString())">@producto.Codigo — @producto.Nombre</option> }</select></label> }
+        @if (Tipo is "inventario" or "ventas" or "top-productos") { <label>Almacén<select name="almacenId" class="block w-full rounded border p-2"><option value="">Todos</option>@foreach (var almacen in OpcionesAlmacenes) { <option value="@almacen.Id" selected="@(AlmacenId == almacen.Id.ToString())">@almacen.Codigo — @almacen.Nombre</option> }</select></label> }
+        <label>Estado<select name="estado" class="block w-full rounded border p-2">
+            @foreach (var estado in Estados) { <option value="@estado.Valor" selected="@(Estado == estado.Valor)">@estado.Texto</option> }
+        </select></label>
+    </div>
+    <p class="text-xs text-slate-500">Inventario y cuentas por cobrar acumulan los movimientos hasta la fecha de corte. Ventas filtra documentos completos; productos más vendidos usa importes sin IVA, netos de devoluciones.</p>
+    <button type="submit" class="rounded bg-brand-600 text-white px-4 py-2">Consultar</button>
+</form>
+@if (Error is not null) { <div role="alert" class="rounded border border-red-300 p-4">@Error</div> }
+else if (Tabla is not null)
+{
+    <h2 class="text-xl font-bold">@Tabla.Titulo</h2>
+    <p class="text-sm my-2">@Tabla.Filtros</p>
+    <div class="flex gap-4 my-4"><a class="underline" href="@Descarga("pdf")" data-enhance-nav="false">Descargar PDF</a><a class="underline" href="@Descarga("xlsx")" data-enhance-nav="false">Exportar Excel</a></div>
+    <p class="font-semibold mb-3">@Tabla.Resumen</p>
+    @if (Tabla.Filas.Count == 0) { <p>No hay resultados para estos filtros.</p> }
+    else
+    {
+        <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr>@foreach (var columna in Tabla.Columnas) { <th class="p-2 border-b text-left">@columna</th> }</tr></thead>
+        <tbody>@foreach (var fila in Tabla.Filas) { <tr>@foreach (var valor in fila) { <td class="p-2 border-b">@ReporteEmpresarialDocumentService.Texto(valor)</td> }</tr> }</tbody></table></div>
+    }
+    <p class="text-sm mt-3">Página @Pagina de @Math.Max(1, (long)Math.Ceiling(Tabla.TotalRegistros / 200m)) · Hasta 200 registros por página. Los totales corresponden a todos los resultados filtrados.</p>
+    <div class="flex gap-4 mt-3">@if (Pagina > 1) { <a class="underline" href="@PaginaUrl((int)Math.Min(Pagina - 1, Math.Max(1, (long)Math.Ceiling(Tabla.TotalRegistros / 200m))))">Anterior</a> } @if ((long)Pagina * 200 < Tabla.TotalRegistros) { <a class="underline" href="@PaginaUrl(Pagina + 1)">Siguiente</a> }</div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "tipo")] public string Tipo { get; set; } = "ventas";
+    [SupplyParameterFromQuery] public string? Desde { get; set; }
+    [SupplyParameterFromQuery] public string? Hasta { get; set; }
+    [SupplyParameterFromQuery] public string? ClienteId { get; set; }
+    [SupplyParameterFromQuery] public string? ProductoId { get; set; }
+    [SupplyParameterFromQuery] public string? AlmacenId { get; set; }
+    [SupplyParameterFromQuery] public string Estado { get; set; } = "todos";
+    [SupplyParameterFromQuery] public string Moneda { get; set; } = "DOP";
+    [SupplyParameterFromQuery] public int Pagina { get; set; } = 1;
+    private ReporteTabla? Tabla;
+    private string? Error;
+    private ReporteCriterios Criterios = new();
+    private IReadOnlyList<OpenSource1.Application.Features.SociosNegocio.Dtos.SocioNegocioResponse> OpcionesClientes = [];
+    private IReadOnlyList<OpenSource1.Application.Features.Productos.Dtos.ProductoResponse> OpcionesProductos = [];
+    private readonly List<OpenSource1.Application.Features.Almacenes.Dtos.AlmacenResponse> OpcionesAlmacenes = [];
+    private (string Valor, string Texto)[] Estados => Tipo switch
+    {
+        "inventario" => [("todos", "Todos"), ("con-existencia", "Con existencia"), ("sin-existencia", "Sin existencia")],
+        "cuentas-por-cobrar" => [("todos", "Todos"), ("con-saldo", "Con saldo")],
+        _ => [("todos", "Todos"), ("ventas", "Ventas"), ("devoluciones", "Devoluciones")]
+    };
+    protected override async Task OnParametersSetAsync()
+    {
+        Tabla = null; Error = null;
+        Tipo = string.IsNullOrWhiteSpace(Tipo) ? "ventas" : Tipo;
+        Estado = string.IsNullOrWhiteSpace(Estado) ? "todos" : Estado;
+        Moneda = string.IsNullOrWhiteSpace(Moneda) ? "DOP" : Moneda;
+        if (Pagina == 0) Pagina = 1;
+        try
+        {
+            OpcionesClientes = await Clientes.ListAllAsync();
+            OpcionesProductos = await Productos.ListAllAsync();
+            OpcionesAlmacenes.Clear();
+            var paginaAlmacen = 1;
+            OpenSource1.Core.Common.PagedResult<OpenSource1.Application.Features.Almacenes.Dtos.AlmacenResponse> almacenes;
+            do
+            {
+                almacenes = await Almacenes.ListAsync(paginacion: new(Pagina: paginaAlmacen++, TamanoPagina: 200));
+                OpcionesAlmacenes.AddRange(almacenes.Items);
+            } while (paginaAlmacen <= almacenes.TotalPaginas);
+            Criterios = new(Fecha(Desde), Fecha(Hasta), Id(ClienteId), Id(ProductoId), Estado, Id(AlmacenId), Pagina, Moneda: Moneda);
+            Tabla = await Reportes.TablaAsync(Tipo, Criterios, false);
+        }
+        catch (Exception error) when (error is ArgumentException or FormatException or HttpRequestException)
+        { Error = error is HttpRequestException ? error.Message : "Filtros inválidos. Revise el reporte, fechas e identificadores."; }
+    }
+    private static DateOnly? Fecha(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : DateOnly.ParseExact(valor, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+    private static Guid? Id(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : Guid.Parse(valor);
+    private string Consulta => ReportesEmpresarialesApiClient.Url(Tipo, Criterios).Split('?')[1];
+    private string Descarga(string formato) => $"/reports/empresarial/{Tipo}.{formato}?{Consulta}";
+    private string PaginaUrl(int pagina) => $"/reporteria/empresarial?tipo={Uri.EscapeDataString(Tipo)}&{ReportesEmpresarialesApiClient.Url(Tipo, Criterios with { Pagina = pagina }).Split('?')[1]}";
+}

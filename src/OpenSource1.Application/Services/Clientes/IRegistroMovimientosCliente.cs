@@ -28,10 +28,13 @@ public sealed record MovimientoClienteRegistrado(long MovimientoClienteId, long 
 
 /// <summary>
 /// Movimiento de cliente bloqueado <c>FOR UPDATE</c> con su importe restante (<c>Σ detalle.Importe</c>) leído DESPUÉS de obtener
-/// el bloqueo.
+/// el bloqueo. La fecha y la cuenta CxC congelada permiten validar la fecha de aplicación y reclasificar
+/// cuentas distintas sin depender del grupo vigente del cliente.
 /// </summary>
 public sealed record MovimientoClienteBloqueado(
-    long Id, Guid SocioNegocioId, TipoDocumentoCliente TipoDocumento, string NumeroDocumento, decimal ImporteRestante);
+    // Original: long Id, Guid SocioNegocioId, TipoDocumentoCliente TipoDocumento, string NumeroDocumento, decimal ImporteRestante);
+    long Id, Guid SocioNegocioId, TipoDocumentoCliente TipoDocumento, string NumeroDocumento, decimal ImporteRestante,
+    DateOnly FechaRegistro = default, Guid CuentaCxCId = default);
 
 /// <summary>
 /// Aplicación de un movimiento de restante negativo (pago o nota de crédito) a uno de restante positivo (factura), spec 6.4 y

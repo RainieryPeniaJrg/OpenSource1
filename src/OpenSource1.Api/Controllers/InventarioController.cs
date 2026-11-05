@@ -98,7 +98,8 @@ public sealed class InventarioController(ISender sender) : ControllerBase
     /// <summary>
     /// Existencia y valor por producto y almacén a la fecha <c>fecha</c> (incluida; por defecto hoy), con el costo medio y el valor
     /// total de todas las filas filtradas. <c>texto</c> busca en código y nombre del producto; <c>soloConExistencia</c> oculta las
-    /// filas con existencia 0. Orden por defecto: código de producto y de almacén ascendente; columnas: <c>ProductoCodigo</c>,
+    /// Original: filas con existencia 0. Ahora solo oculta filas cuya cantidad Y valor son cero (conserva valor residual).
+    /// Orden por defecto: código de producto y de almacén ascendente; columnas: <c>ProductoCodigo</c>,
     /// <c>ProductoNombre</c>, <c>AlmacenCodigo</c>, <c>Existencia</c>, <c>Valor</c>.
     /// </summary>
     [HttpGet("existencias")]

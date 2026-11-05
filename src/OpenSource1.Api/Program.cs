@@ -24,6 +24,7 @@ Log.Logger = new LoggerConfiguration()
     .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddProductionHttpSecurity(builder.Configuration);
 
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
@@ -88,6 +89,8 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 // ────────────────────────────────────────────────────────────────────────────
 
 var app = builder.Build();
+app.UseForwardedHeaders();
+app.MapHealthChecks("/health/live");
 
 if (app.Environment.IsDevelopment())
 {

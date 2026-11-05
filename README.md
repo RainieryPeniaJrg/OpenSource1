@@ -1,5 +1,13 @@
 # AxionERP / OpenSource1
 
+## Parte 2 — seguridad, reportería y procesos
+
+La ampliación se desarrolla en `parte2_opensource_2`, desde `45bc4bc`. Consulte el
+[paquete de entrega de la Parte 2](docs/entregable-parte-2/README.md) y su
+[plan de análisis y ejecución](docs/superpowers/plans/2026-11-03-parte2-opensource-2.md).
+Incluye el rol adicional Vendedor, cuatro reportes empresariales con PDF/Excel y validación aislada del flujo de venta.
+Ejecutor y los reportes anteriores se conservan por compatibilidad.
+
 Proyecto final para la materia **DESARROLLO DE SOFTWARE CON TECNOLOGÍAS PROPIETARIAS Y OPEN SOURCE I / ISO-615**.
 
 **Nombre del proyecto:** Sistema de Gestión Empresarial con Control de Acceso por Roles.
@@ -55,8 +63,9 @@ Actualmente el proyecto cuenta con:
 - Base de datos PostgreSQL para aplicación e identidad.
 - Docker Compose con API, Blazor y PostgreSQL.
 - Imágenes publicadas en Docker Hub: `ggeasy75/opensource`.
-- CRUD de entradas.
-- CRUD de configuraciones de aplicación.
+<!-- Estado histórico Parte 1: - CRUD de entradas. -->
+<!-- Estado histórico Parte 1: - CRUD de configuraciones de aplicación. -->
+- Los módulos de ejemplo Entradas/AppSettings fueron retirados en la Fase 8; las configuraciones empresariales tienen módulos propios.
 - Gestión de usuarios, roles y estado activo/inactivo.
 - Gestión de clientes con buscadores, filtros, reportes y Excel.
 - Gestión de productos con buscadores, filtros, dashboards, reportes y Excel.
@@ -91,7 +100,8 @@ Actualmente el proyecto cuenta con:
 
 La **Etapa III — Integración Total del Sistema** se encuentra documentada en:
 
-- [`docs/ENTREGABLE-3.md`](docs/ENTREGABLE-3.md)
+<!-- Enlace histórico: [`docs/ENTREGABLE-3.md`](docs/ENTREGABLE-3.md) -->
+- [`Documento final académico`](docs/ENTREGABLE-Final-A00120258.md)
 
 Carpeta sugerida para capturas del documento:
 
@@ -162,6 +172,7 @@ La **Etapa I — Sistema de Login y Roles** está cubierta con los siguientes pu
 | `Administrador` | Sí | Sí | Sí | Sí |
 | `Supervisor` | Sí | No | Sí | No |
 | `Ejecutor` | Sí | Sí | No | No |
+| `Vendedor` | Sí | Solo borradores de factura | Solo operaciones de factura | No |
 
 Políticas internas usadas por la API:
 
@@ -181,6 +192,7 @@ Cuando la carga inicial de usuarios está habilitada, se crean estos usuarios:
 | `admin` | `Administrador` |
 | `supervisor` | `Supervisor` |
 | `ejecutor` | `Ejecutor` |
+| `vendedor` | `Vendedor` |
 
 Su contraseña es la que se define en `AUTH_SEED_DEFAULT_PASSWORD` del archivo `.env` (con la plantilla, el valor de
 `.env.example`). Use un valor propio y no lo publique; la carga inicial es solo para desarrollo y demostración.
@@ -524,7 +536,8 @@ Incluye:
 - Reportes PDF y exportaciones a Excel.
 - Bitácora operativa para Administrador y Supervisor.
 - Modo oscuro y diseño responsivo.
-- Documento académico final en [`docs/ENTREGABLE-3.md`](docs/ENTREGABLE-3.md).
+<!-- Enlace histórico: Documento académico final en [`docs/ENTREGABLE-3.md`](docs/ENTREGABLE-3.md). -->
+- Documento académico final en [`docs/ENTREGABLE-Final-A00120258.md`](docs/ENTREGABLE-Final-A00120258.md).
 - 47 capturas E2E con evidencia de módulos, formularios, confirmaciones y permisos.
 - Pruebas específicas para demostrar restricciones de Supervisor y Ejecutor tanto en UI como en API.
 

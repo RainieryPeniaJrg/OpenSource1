@@ -31,6 +31,7 @@ public sealed class AuthPermissionsApiTests : IClassFixture<PostgresTestFixture>
     [InlineData("admin", ApplicationRoles.Administrator)]
     [InlineData("supervisor", ApplicationRoles.Supervisor)]
     [InlineData("ejecutor", ApplicationRoles.Executor)]
+    [InlineData("vendedor", ApplicationRoles.Salesperson)]
     public async Task Login_Incluye_Permisos_Coarse_Y_Finos_En_El_Mismo_Array(string userName, string rolEsperado)
     {
         var response = await LoginAsync(userName);
@@ -62,6 +63,7 @@ public sealed class AuthPermissionsApiTests : IClassFixture<PostgresTestFixture>
     [InlineData("admin")]
     [InlineData("supervisor")]
     [InlineData("ejecutor")]
+    [InlineData("vendedor")]
     public async Task Jwt_Emite_Un_Claim_Permission_Por_Cada_Entrada_De_Permissions(string userName)
     {
         var response = await LoginAsync(userName);
@@ -115,6 +117,7 @@ public sealed class AuthPermissionsApiTests : IClassFixture<PostgresTestFixture>
     [Theory]
     [InlineData("supervisor")]
     [InlineData("ejecutor")]
+    [InlineData("vendedor")]
     public async Task CanAdministrar_SoloSeEmiteParaElAdministrador(string userName)
     {
         var response = await LoginAsync(userName);
@@ -143,6 +146,7 @@ public sealed class AuthPermissionsApiTests : IClassFixture<PostgresTestFixture>
              ApplicationPolicies.CanAdministrar],
         ApplicationRoles.Supervisor => [ApplicationPolicies.CanModify, ApplicationPolicies.CanConsult],
         ApplicationRoles.Executor => [ApplicationPolicies.CanAdd, ApplicationPolicies.CanConsult],
+        ApplicationRoles.Salesperson => [ApplicationPolicies.CanConsult],
         _ => []
     };
 }
